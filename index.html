@@ -446,9 +446,10 @@ function generateFloor(f) {
     g[y][x] = rng() < 0.75 ? '+' : '.';
   }
 
-  // Start in the leftmost room; the exit goes in the room whose walking distance is closest to EXIT_STEPS.
+  // Start in the main corridor at the west end, with doors and branches in reach right away.
+  // The exit goes in the room whose walking distance is closest to EXIT_STEPS.
   const rooms = spaces.filter(s => !s.corridor);
-  const start = rooms.reduce((a, b) => b.cx < a.cx || (b.cx === a.cx && Math.abs(b.cy - hy) < Math.abs(a.cy - hy)) ? b : a);
+  const start = { cx: 1, cy: hy };
   const dist = Array.from({ length: H }, () => Array(W).fill(-1)), q = [[start.cx, start.cy]];
   dist[start.cy][start.cx] = 0;
   while (q.length) {
@@ -479,7 +480,6 @@ function generateFloor(f) {
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (g[y + dy][x + dx] !== '.') open = false;
       if (open) g[y][x] = 'o';
     }
-    if (r === start) continue;
     const n = (rng() < f.enemyChance ? 1 : 0) + (r === exitRoom ? 1 : 0);
     for (let i = 0; i < n; i++) { const p = freeTile(r); if (p) g[p[1]][p[0]] = pick([...f.mix]); }
     const p = freeTile(r);

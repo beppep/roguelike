@@ -183,15 +183,6 @@ button:disabled { opacity: .4; cursor: default; }
 #modal .box { background: var(--panel); border: 1px solid var(--red); padding: 24px 28px; border-radius: 3px; text-align: center; min-width: 300px; box-shadow: 0 0 30px rgba(255,46,151,.3); }
 #modal h2 { margin: 0 0 8px; font-family: var(--mono); letter-spacing: 3px; text-transform: uppercase; color: var(--blue); text-shadow: 0 0 10px rgba(34,228,255,.6); }
 #modal p { color: #b7c0e0; margin: 0 0 18px; }
-.chars { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
-.char { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 230px; padding: 16px; text-align: center; background: #0d1020; border: 1px solid #2c3354; border-radius: 4px; cursor: pointer; }
-.char:hover, .char:focus-visible { border-color: var(--gold); box-shadow: 0 0 16px rgba(248,225,74,.35); }
-.char-name { font: 800 18px var(--mono); letter-spacing: 2px; text-transform: uppercase; color: var(--blue); }
-.char-blurb { color: #b7c0e0; font-size: 13px; }
-.char-stats { display: flex; gap: 14px; font: 13px var(--mono); color: var(--muted); }
-.char-stats b { color: var(--gold); font-size: 16px; }
-.char-sig { font: 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
-.char .card { pointer-events: none; }
 #modal .box.wide { max-width: min(820px, calc(100vw - 32px)); }
 .keep-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 10px; }
 .keep-grid .card.dropped { filter: brightness(.35) grayscale(.8); }
@@ -225,7 +216,7 @@ button:disabled { opacity: .4; cursor: default; }
 <script>
 // ---------- Tuning ----------
 const T = 46;
-const MAX_HP = 18;
+const MAX_HP = 10;
 
 // Attack shapes, written facing "up" (y = -1). Rotated to face the chosen direction.
 const SHAPES = {
@@ -248,22 +239,14 @@ const SHARED_CARDS = [
   { id: 8, name: 'Lockpick',    action: { type: 'melee', dmg: 0, pick: true } },
 ];
 
-// Playable characters. strength = damage of the basic Melee Attack card, move = free steps every turn.
-// Each starts with 3 Melee Attacks, their own signature card, and the shared cards above.
-const CHARACTERS = {
-  soldier: {
-    name: 'Soldier', blurb: 'Hits hard and carries a silenced pistol.', strength: 4, move: 3,
-    signature: { id: 4, name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5 } },
-  },
-  infiltrator: {
-    name: 'Infiltrator', blurb: 'Fast and quiet, weaker in a fight.', strength: 3, move: 4,
-    signature: { id: 4, name: 'Sprint', action: { type: 'self', move: 3 } },
-  },
-};
+// You, the operative. strength = damage of the basic Melee Attack card, move = free steps every turn.
+const OPERATIVE = { name: 'Operative', strength: 3, move: 4 };
 
+// Starting deck: 2 Melee Attacks, a silenced pistol, a sprint (3 extra steps) and the shared cards above.
 const startingDeck = ch => [
-  ...[1, 2, 3].map(id => ({ id, name: 'Melee Attack', action: { type: 'melee', dmg: ch.strength } })),
-  ch.signature,
+  ...[1, 2].map(id => ({ id, name: 'Melee Attack', action: { type: 'melee', dmg: ch.strength } })),
+  { id: 3, name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5 } },
+  { id: 4, name: 'Sprint',          action: { type: 'self', move: 3 } },
   ...SHARED_CARDS,
 ];
 
@@ -646,29 +629,11 @@ let deck = [];  // the run's deck; set by the character you pick, grows as you f
 let run = null;  // the character you play plus loot that carries across floors
 const unitEls = new Map();
 
-// Start of a run: pick who you play. Sets the starting deck and stats, then opens floor 1.
-function chooseCharacter() {
-  run = null;
-  const m = $('#modal');
-  m.innerHTML = `<div class="box wide"><h2>Choose your operative</h2>
-    <p>Get through the corporate tower. Pick who goes in.</p>
-    <div class="chars">${Object.entries(CHARACTERS).map(([k, ch]) => `
-      <button class="char" data-char="${k}">
-        <span class="char-name">${ch.name}</span>
-        <span class="char-blurb">${ch.blurb}</span>
-        <span class="char-stats"><span>Strength <b>${ch.strength}</b></span><span>Move <b>${ch.move}</b></span></span>
-        <span class="char-sig">Own card:</span>
-        <span class="card">${cardHTML(ch.signature)}</span>
-      </button>`).join('')}</div></div>`;
-  m.querySelectorAll('[data-char]').forEach(b => b.onclick = e => {
-    e.stopPropagation();
-    const ch = CHARACTERS[b.dataset.char];
-    run = { char: ch, creds: 0, stims: 0, speed: 0, strength: 0, gunMods: 0 };
-    deck = startingDeck(ch);
-    m.hidden = true;
-    loadRoom(0);
-  });
-  m.hidden = false;
+// Start of a run: fresh deck and loot, then floor 1.
+function newRun() {
+  run = { char: OPERATIVE, creds: 0, stims: 0, speed: 0, strength: 0, gunMods: 0 };
+  deck = startingDeck(OPERATIVE);
+  loadRoom(0);
 }
 
 function loadRoom(idx) {
@@ -1586,10 +1551,10 @@ document.addEventListener('click', e => {
   else if (S.busy) return;
   else if (act === 'restart') { $('#modal').hidden = true; loadRoom(S.room); }
   else if (act === 'nextroom') { $('#modal').hidden = true; loadRoom(S.room + 1); }
-  else if (act === 'newrun') { $('#modal').hidden = true; chooseCharacter(); }
+  else if (act === 'newrun') { $('#modal').hidden = true; newRun(); }
 });
 
-chooseCharacter();
+newRun();
 </script>
 </body>
 </html>

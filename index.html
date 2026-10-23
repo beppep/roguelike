@@ -60,7 +60,10 @@ button:disabled { opacity: .4; cursor: default; }
 .tile.door { background: linear-gradient(90deg, #10202a 0 46%, #22e4ff 46% 54%, #10202a 54%); box-shadow: inset 0 0 0 2px #22e4ff, 0 0 10px rgba(34,228,255,.35); display: grid; place-items: center; }
 .tile.door span { font: 800 11px var(--mono); color: #04050a; background: #22e4ff; padding: 0 4px; border-radius: 2px; position: relative; z-index: 1; }
 .tile.drop { display: grid; place-items: center; }
-.tile.drop-stim span { width: 18px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #4dff9a 50%, #e4ecff 50%); box-shadow: 0 0 10px #4dff9a; transform: rotate(-30deg); }
+.tile.drop-stim span, .tile.drop-speed span, .tile.drop-strength span { width: 18px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--pc) 50%, #e4ecff 50%); box-shadow: 0 0 10px var(--pc); transform: rotate(-30deg); }
+.tile.drop-stim { --pc: #4dff9a; }
+.tile.drop-speed { --pc: #22e4ff; }
+.tile.drop-strength { --pc: #ff3b6b; }
 .tile.drop-gunmod span { width: 18px; height: 10px; border-radius: 2px; background: #ff8a1c; box-shadow: 0 0 10px #ff8a1c, inset 0 0 0 2px #3b2210; }
 .tile.loot { display: grid; place-items: center; }
 .tile.loot span { width: 14px; height: 14px; transform: rotate(45deg); background: var(--gold); box-shadow: 0 0 10px var(--gold); animation: glint 1.6s ease-in-out infinite; }
@@ -264,8 +267,8 @@ const REWARD_CARDS = [
   { id: 21, name: 'Nano-Stim',    action: { type: 'self', heal: 4 } },
 ];
 
-// What a successful pickpocket finds (the rest of the time: nothing). A stim is a free-action heal.
-const LOOT_ODDS = { card: 0.15, creds: 0.3, stim: 0.2, serum: 0.1 };
+// What a successful pickpocket finds (the rest of the time: nothing). A potion is one of the three below, equally likely.
+const LOOT_ODDS = { card: 0.15, creds: 0.3, potion: 0.3 };
 const STIM_HEAL = 3;
 
 // Serums: drink one and the bonus lasts this turn plus the next ones, SERUM_TURNS turns in all.
@@ -289,7 +292,7 @@ const DOOR_HP = 5;
 // Furniture you can smash with damaging attacks, per floor theme. Each one leaves a pickup on its tile:
 // walk over it to take it. Floors not listed here have furniture that can't be broken.
 const BREAKABLES = {
-  pharma:  { name: 'vat',   hp: 4, drop: 'stim' },
+  pharma:  { name: 'vat',   hp: 4, drop: 'potion' },
   weapons: { name: 'crate', hp: 6, drop: 'gunmod' },
 };
 
@@ -322,11 +325,11 @@ const EXIT_STEPS = 45;
 
 const FLOORS = [
   { name: 'Pharma Labs',     theme: 'pharma',  cache: 'a medicine cabinet', seed: 1101, w: 40, h: 28, vCorridors: 2,
-    extraDoors: 0.3, enemyChance: 0.35, lootChance: 0.6, guards: 1, mix: 'ggd',   loot: { card: 0.15, creds: 0.25, stim: 0.35, serum: 0.25 } },
+    extraDoors: 0.3, enemyChance: 0.35, lootChance: 0.6, guards: 1, mix: 'ggd',   loot: { card: 0.15, creds: 0.25, potion: 0.6 } },
   { name: 'Weapons Foundry', theme: 'weapons', cache: 'a weapons locker',   seed: 2202, w: 46, h: 30, vCorridors: 2,
-    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, mix: 'gggde', loot: { card: 0.35, creds: 0.4, stim: 0.15, serum: 0.1 } },
+    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, mix: 'gggde', loot: { card: 0.35, creds: 0.4, potion: 0.25 } },
   { name: 'Droid Assembly',  theme: 'droids',  cache: 'a parts bin',        seed: 3303, w: 50, h: 34, vCorridors: 3,
-    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.45, guards: 3, mix: 'gddde', loot: { card: 0.2, creds: 0.45, stim: 0.25, serum: 0.1 } },
+    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.45, guards: 3, mix: 'gddde', loot: { card: 0.2, creds: 0.45, potion: 0.35 } },
 ];
 
 function mulberry32(a) {
@@ -866,7 +869,25 @@ function pickpocket(e) {
   grantLoot(e, LOOT_ODDS, `from ${nameOf(e)}`, `${nameOf(e)}'s pockets are empty.`);
 }
 
-// Rolls odds {card, creds, stim} (whatever is left over finds nothing) and gives the result.
+// The three potions are always equally likely: healing stim, speed serum, strength serum.
+const POTIONS = ['stim', 'speed', 'strength'];
+const randomPotion = () => POTIONS[Math.floor(Math.random() * POTIONS.length)];
+
+function givePotion(kind, at, from) {
+  if (kind === 'stim') {
+    run.stims++;
+    floatText(at, '+STIM', 'heal');
+    log(`You take a <b>healing stim</b> ${from}. Use it from the panel on the right to heal ${STIM_HEAL}.`);
+  } else {
+    const sv = SERUMS[kind];
+    run[kind]++;
+    floatText(at, '+SERUM', 'heal');
+    log(`You take a <b>${sv.name}</b> ${from}: +${sv.bonus} ${sv.desc} for ${SERUM_TURNS} turns. Use it from the panel on the right.`);
+  }
+  renderSide();
+}
+
+// Rolls odds {card, creds, potion} (whatever is left over finds nothing) and gives the result.
 // `at` is where the pop-up text appears; `from` finishes the log line ("from Ganger", "in a parts bin").
 function grantLoot(at, odds, from, emptyMsg) {
   const owned = new Set(deck.map(c => c.id));
@@ -888,15 +909,8 @@ function grantLoot(at, odds, from, emptyMsg) {
     run.creds += n;
     floatText(at, `+¥${n}`, 'stun');
     log(`You take ¥${n} creds ${from}.`);
-  } else if (roll < odds.creds + odds.stim) {
-    run.stims++;
-    floatText(at, '+STIM', 'heal');
-    log(`You take a <b>healing stim</b> ${from}. Use it from the panel on the right to heal ${STIM_HEAL}.`);
-  } else if (roll < odds.creds + odds.stim + (odds.serum || 0)) {
-    const kind = Math.random() < 0.5 ? 'speed' : 'strength', sv = SERUMS[kind];
-    run[kind]++;
-    floatText(at, '+SERUM', 'heal');
-    log(`You take a <b>${sv.name}</b> ${from}: +${sv.bonus} ${sv.desc} for ${SERUM_TURNS} turns. Use it from the panel on the right.`);
+  } else if (roll < odds.creds + odds.potion) {
+    givePotion(randomPotion(), at, from);
   } else {
     floatText(at, 'EMPTY', 'stun');
     log(emptyMsg);
@@ -954,8 +968,8 @@ function hitVat(t, s) {
     const el = tileEl(t.x, t.y);
     el.classList.remove('prop', 'vat');
     el.innerHTML = '';
-    S.drops.set(k, b.drop);
-    log(`The ${b.name} breaks open. Something ${b.drop === 'stim' ? 'glints' : 'clatters'} on the floor: walk over it to take it.`);
+    S.drops.set(k, b.drop === 'potion' ? randomPotion() : b.drop);
+    log(`The ${b.name} breaks open. Something ${b.drop === 'potion' ? 'glints' : 'clatters'} on the floor: walk over it to take it.`);
     renderDrops();
   }
   renderVats(); renderOverlays(); renderSide();
@@ -966,10 +980,8 @@ function takeDrop(x, y) {
   const k = key(x, y), what = S.drops.get(k);
   S.drops.delete(k);
   renderDrops();
-  if (what === 'stim') {
-    run.stims++;
-    floatText({ x, y }, '+STIM', 'heal');
-    log('You pick up a <b>healing stim</b>.');
+  if (POTIONS.includes(what)) {
+    givePotion(what, { x, y }, 'off the floor');
   } else if (run.gunMods >= GUN_MOD_MAX) {
     log(`A gun mod, but your guns already carry the maximum of ${GUN_MOD_MAX}.`);
   } else {
@@ -1288,7 +1300,7 @@ function renderVats() {
 }
 
 function renderDrops() {
-  for (const t of $('#board').querySelectorAll('.tile.drop')) { t.classList.remove('drop', 'drop-stim', 'drop-gunmod'); t.innerHTML = ''; }
+  for (const t of $('#board').querySelectorAll('.tile.drop')) { t.classList.remove('drop', 'drop-stim', 'drop-speed', 'drop-strength', 'drop-gunmod'); t.innerHTML = ''; }
   for (const [k, what] of S.drops) {
     const t = tileEl(...unkey(k));
     t.classList.add('drop', 'drop-' + what);
@@ -1332,7 +1344,7 @@ function drawMinimap() {
   }
   const dot = (x, y, col) => { c.fillStyle = col; c.fillRect(x * s - 1, y * s - 1, s + 2, s + 2); };
   for (const k of S.loot) dot(...unkey(k), '#f8e14a');
-  for (const [k, what] of S.drops) dot(...unkey(k), what === 'stim' ? '#4dff9a' : '#ff8a1c');
+  for (const [k, what] of S.drops) dot(...unkey(k), { stim: '#4dff9a', speed: '#22e4ff', strength: '#ff3b6b' }[what] || '#ff8a1c');
   dot(S.exit.x, S.exit.y, S.needKey && !S.hasKey ? '#ff3b6b' : '#4dff9a');
   for (const e of S.enemies) dot(e.x, e.y, e.alerted ? '#ff2e97' : ENEMY_TYPES[e.kind].color);
   dot(S.player.x, S.player.y, '#ffffff');

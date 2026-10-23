@@ -247,7 +247,7 @@ const OPERATIVE = { name: 'Operative', strength: 3, move: 4 };
 
 // Starting deck: 2 Melee Attacks, a silenced pistol, a sprint (3 extra steps) and the shared cards above.
 const startingDeck = ch => [
-  ...[1, 2].map(id => ({ id, name: 'Melee Attack', action: { type: 'melee', dmg: ch.strength } })),
+  ...[1, 2].map(id => ({ id, name: 'Melee Attack', action: { type: 'melee', dmg: ch.strength, str: true } })),
   { id: 3, name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5 } },
   { id: 4, name: 'Sprint',          action: { type: 'self', move: 3 } },
   ...SHARED_CARDS,
@@ -271,11 +271,11 @@ const REWARD_CARDS = [
 const LOOT_ODDS = { card: 0.15, creds: 0.3, potion: 0.3 };
 const STIM_HEAL = 3;
 
-// Serums: drink one and the bonus lasts this turn plus the next ones, SERUM_TURNS turns in all.
-const SERUM_TURNS = 3;
+// Serums: drink one and the bonus lasts this turn plus the next ones, `turns` turns in all.
+// The strength serum raises your basic Strength, so it boosts Melee Attacks (the cards that use Strength).
 const SERUMS = {
-  speed:    { name: 'Speed serum',    bonus: 2, desc: 'move' },
-  strength: { name: 'Strength serum', bonus: 2, desc: 'damage' },
+  speed:    { name: 'Speed serum',    bonus: 2, desc: 'move',     turns: 3 },
+  strength: { name: 'Strength serum', bonus: 2, desc: 'Strength', turns: 5 },
 };
 
 // Every hit (yours and enemies') has this chance to land 1 off its listed damage, half up and half down.
@@ -622,7 +622,7 @@ function dirTo(x, y) {
   return Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
 }
 
-const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${s.move}` : '', s.heal ? `Heal ${s.heal}` : '']
+const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0) + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${s.move}` : '', s.heal ? `Heal ${s.heal}` : '']
   .filter(Boolean).join(' + ');
 const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}`;
 
@@ -824,7 +824,7 @@ async function useAttack(hit) {
   const a = S.act, P = S.player;
   let s = a.atk;
   {
-    if (s.dmg > 0) s = { ...s, dmg: s.dmg + gunBonus(s) + serumBonus('strength') };
+    if (s.dmg > 0) s = { ...s, dmg: s.dmg + gunBonus(s) + (s.str ? serumBonus("strength") : 0) };
     const targets = hit.map(t => !s.pick && enemyAt(t.x, t.y)).filter(Boolean);
     const doors = hit.filter(t => canHitDoor(s) && doorAt(t.x, t.y));
     const vats = hit.filter(t => s.dmg > 0 && vatAt(t.x, t.y));
@@ -882,7 +882,7 @@ function givePotion(kind, at, from) {
     const sv = SERUMS[kind];
     run[kind]++;
     floatText(at, '+SERUM', 'heal');
-    log(`You take a <b>${sv.name}</b> ${from}: +${sv.bonus} ${sv.desc} for ${SERUM_TURNS} turns. Use it from the panel on the right.`);
+    log(`You take a <b>${sv.name}</b> ${from}: +${sv.bonus} ${sv.desc} for ${sv.turns} turns. Use it from the panel on the right.`);
   }
   renderSide();
 }
@@ -933,12 +933,12 @@ function useStim() {
 
 const serumBonus = kind => S.buff[kind] > 0 ? SERUMS[kind].bonus : 0;
 
-// Drinking a serum counts this turn as the first of its SERUM_TURNS; a second dose adds more turns.
+// Drinking a serum counts this turn as the first of its turns; a second dose adds more turns.
 function useSerum(kind) {
   if (!run[kind] || S.busy || S.phase !== 'turn') return;
   const sv = SERUMS[kind], wasActive = S.buff[kind] > 0;
   run[kind]--;
-  S.buff[kind] += SERUM_TURNS;
+  S.buff[kind] += sv.turns;
   // Already mid-turn with the move still unused: the extra steps apply right away.
   if (kind === 'speed' && !wasActive && S.phase === 'turn' && !S.act.mvUsed) S.act.move += sv.bonus;
   floatText(S.player, `+${sv.bonus} ${sv.desc.toUpperCase()}`, 'heal');
@@ -1433,7 +1433,7 @@ function renderSide() {
     <div class="panel">
       <div class="row"><b>Floor ${S.room + 1} / ${MAPS.length}</b><span>Round ${S.round}</span></div>
       <div class="floorname">${FLOORS[S.room].name}</div>
-      <div class="row"><span>${run.char.name}</span><span>STR ${run.char.strength} · MOVE ${run.char.move}</span></div>
+      <div class="row"><span>${run.char.name}</span><span>STR ${run.char.strength + serumBonus("strength")} · MOVE ${run.char.move}</span></div>
       <div class="hpbig"><i style="width:${100 * hp / P.max}%"></i><span>HP ${hp} / ${P.max}</span></div>
       <canvas id="minimap"></canvas>
     </div>
@@ -1466,7 +1466,7 @@ function renderBar() {
     else if (!a.atkUsed) hint = (isDirectional(a.atk) ? 'Point toward a target and click a red tile' : 'Click a red target')
       + ` to use <b>${c.name}</b>. Click the card again to put it back.`;
     else hint = a.mvUsed ? 'Done for this turn. Use a stim or serum if you like, then end your turn.' : 'Click a blue tile to move, or end your turn.';
-    const bonus = a.atk && a.atk.dmg > 0 && serumBonus('strength') ? ` (+${serumBonus('strength')})` : '';
+    const bonus = '';
     bar.innerHTML = `
       <div class="hint">${hint}</div>
       <div class="chips">

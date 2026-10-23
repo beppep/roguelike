@@ -1,0 +1,1595 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Neon Crawl</title>
+<style>
+:root {
+  --T: 46px;
+  --bg: #07080f;
+  --panel: #11131f;
+  --ink: #e4ecff;
+  --muted: #7d86a8;
+  --gold: #f8e14a;
+  --blue: #22e4ff;
+  --red: #ff2e97;
+  --mono: Consolas, "Cascadia Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: radial-gradient(ellipse at top, #1a0f2e 0%, var(--bg) 60%) fixed; color: var(--ink); font: 14px/1.4 system-ui, "Segoe UI", sans-serif; }
+#app { max-width: 1400px; margin: 0 auto; padding: 12px 16px; }
+header { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; }
+h1 { font: 700 20px var(--mono); margin: 0; letter-spacing: 3px; text-transform: uppercase; color: var(--blue); text-shadow: 0 0 8px rgba(34,228,255,.7), 2px 0 0 rgba(255,46,151,.6); }
+h1 span { color: var(--red); font-weight: 400; font-size: 12px; margin-left: 8px; letter-spacing: 2px; text-shadow: none; }
+.spacer { flex: 1; }
+
+button { font: inherit; border-radius: 4px; border: 1px solid #2c3354; background: #151a2e; color: var(--ink); padding: 8px 14px; cursor: pointer; }
+button:hover:not(:disabled) { background: #1d2440; border-color: var(--blue); }
+button.primary { background: var(--gold); color: #12100a; border-color: var(--gold); font-weight: 800; letter-spacing: 1px; text-transform: uppercase; font-size: 13px; box-shadow: 0 0 14px rgba(248,225,74,.35); }
+button.primary:hover:not(:disabled) { background: #fff07a; }
+button:disabled { opacity: .4; cursor: default; }
+
+/* Board, action bar and cards fill the left; map, stats and log sit in a narrow column on the right. */
+#layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 14px; align-items: start; }
+#viewport { position: relative; width: 100%; height: max(300px, calc(100vh - 320px)); overflow: hidden; background: #04050a; box-shadow: 0 0 0 1px rgba(34,228,255,.35), 0 0 30px rgba(34,228,255,.12), 0 10px 40px rgba(0,0,0,.7); }
+#board { position: absolute; left: 0; top: 0; display: grid; user-select: none; transition: transform .18s ease-out; }
+.tile { width: var(--T); height: var(--T); position: relative; }
+.void { background: #04050a; }
+.floor { background: #0d1019; box-shadow: inset 0 0 0 1px rgba(34,228,255,.07); }
+.floor.alt { background: #0f1320; }
+.wall { background: repeating-linear-gradient(135deg, #1c2033 0 6px, #181b2b 6px 12px); box-shadow: inset 0 0 0 1px rgba(255,46,151,.45), inset 0 -5px 0 rgba(0,0,0,.45); }
+
+/* Tower floors: glossy corporate wall panels with a coloured trim, a themed floor and themed furniture. */
+.theme-pharma .wall  { background: linear-gradient(#3d5654, #2a3d3b); box-shadow: inset 0 -4px 0 #37ffb0, inset 0 0 0 1px #0a1212; }
+.theme-pharma .floor { background: #0b1615; box-shadow: inset 0 0 0 1px rgba(55,255,176,.06); }
+.theme-pharma .floor.alt { background: #0d1918; }
+.theme-pharma .prop::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #b6ff5a, #2fae4a 45%, #0d3a1e 75%); box-shadow: 0 0 0 3px #3a4a48, 0 0 14px rgba(140,255,90,.55); }
+.theme-weapons .wall  { background: linear-gradient(#4d443b, #362f28); box-shadow: inset 0 -4px 0 #ff8a1c, inset 0 0 0 1px #0d0b09; }
+.theme-weapons .floor { background: #121214; box-shadow: inset 0 0 0 1px rgba(255,138,28,.06); }
+.theme-weapons .floor.alt { background: #151517; }
+.theme-weapons .prop::before { content: ''; position: absolute; inset: 5px; border-radius: 2px; background: repeating-linear-gradient(45deg, #3b3226 0 6px, #2a241c 6px 12px); box-shadow: inset 0 0 0 2px #ff8a1c, 0 3px 0 rgba(0,0,0,.6); }
+.theme-droids .wall  { background: linear-gradient(#3b4560, #283044); box-shadow: inset 0 -4px 0 #ff3b3b, inset 0 0 0 1px #090b12; }
+.theme-droids .floor { background: repeating-linear-gradient(90deg, #0e1119 0 4px, #111522 4px 8px); }
+.theme-droids .floor.alt { background: repeating-linear-gradient(0deg, #0e1119 0 4px, #111522 4px 8px); }
+.theme-droids .prop::before { content: ''; position: absolute; inset: 7px; border-radius: 40% 40% 20% 20%; background: linear-gradient(#4a5268, #222838); box-shadow: inset 0 0 0 2px #66708a, 0 3px 0 rgba(0,0,0,.6); }
+.theme-droids .prop::after { content: ''; position: absolute; left: 50%; top: 40%; width: 10px; height: 4px; margin-left: -5px; border-radius: 2px; background: #ff3b3b; box-shadow: 0 0 8px #ff3b3b; }
+
+.tile.vat { display: grid; place-items: center; }
+.tile.vat span { position: relative; z-index: 1; font: 800 11px var(--mono); color: #04140b; background: #8cff5a; padding: 0 4px; border-radius: 2px; }
+.tile.door { background: linear-gradient(90deg, #10202a 0 46%, #22e4ff 46% 54%, #10202a 54%); box-shadow: inset 0 0 0 2px #22e4ff, 0 0 10px rgba(34,228,255,.35); display: grid; place-items: center; }
+.tile.door span { font: 800 11px var(--mono); color: #04050a; background: #22e4ff; padding: 0 4px; border-radius: 2px; position: relative; z-index: 1; }
+.tile.drop { display: grid; place-items: center; }
+.tile.drop-stim span { width: 18px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #4dff9a 50%, #e4ecff 50%); box-shadow: 0 0 10px #4dff9a; transform: rotate(-30deg); }
+.tile.drop-gunmod span { width: 18px; height: 10px; border-radius: 2px; background: #ff8a1c; box-shadow: 0 0 10px #ff8a1c, inset 0 0 0 2px #3b2210; }
+.tile.loot { display: grid; place-items: center; }
+.tile.loot span { width: 14px; height: 14px; transform: rotate(45deg); background: var(--gold); box-shadow: 0 0 10px var(--gold); animation: glint 1.6s ease-in-out infinite; }
+@keyframes glint { 50% { box-shadow: 0 0 18px var(--gold); filter: brightness(1.3); } }
+.floorname { font: 700 12px var(--mono); color: var(--red); letter-spacing: 1px; text-transform: uppercase; margin-top: 2px; }
+#minimap { display: block; margin-top: 10px; image-rendering: pixelated; border: 1px solid #23294a; max-width: 100%; }
+.tile::after { content: ''; position: absolute; inset: 3px; border-radius: 3px; pointer-events: none; }
+.tile.exit { background: repeating-linear-gradient(45deg, #062a1c 0 5px, #0a1f18 5px 10px); box-shadow: inset 0 0 0 2px #4dff9a, inset 0 0 14px rgba(77,255,154,.5); display: grid; place-items: center; }
+.tile.exit span { font: 800 10px var(--mono); letter-spacing: 1.5px; color: #4dff9a; text-shadow: 0 0 6px #4dff9a; pointer-events: none; }
+.tile.seen::before { content: ''; position: absolute; inset: 0; background: rgba(248,225,74,.13); box-shadow: inset 0 0 0 1px rgba(248,225,74,.2); pointer-events: none; }
+.tile.next::before { content: ''; position: absolute; inset: 0; background: rgba(177,77,255,.26); box-shadow: inset 0 0 0 1px rgba(177,77,255,.55); pointer-events: none; }
+.tile.reach { cursor: pointer; }
+.tile.reach::after { background: rgba(34,228,255,.16); box-shadow: inset 0 0 0 1px rgba(34,228,255,.75), 0 0 8px rgba(34,228,255,.3); }
+.tile.range::after { background: rgba(255,46,151,.1); }
+.tile.target { cursor: crosshair; }
+.tile.target::after { background: rgba(255,46,151,.3); box-shadow: inset 0 0 0 2px var(--red), 0 0 10px rgba(255,46,151,.5); }
+.tile.preview { cursor: crosshair; }
+.tile.preview::after { background: rgba(255,46,151,.45); box-shadow: inset 0 0 0 2px #ff9ccc, 0 0 12px rgba(255,46,151,.6); }
+
+#fx { position: absolute; inset: 0; pointer-events: none; }
+.unit { position: absolute; width: var(--T); height: var(--T); transition: left .14s linear, top .14s linear, transform .1s ease-out, opacity .35s; z-index: 2; }
+.token { position: absolute; inset: 7px; border-radius: 6px; transform: rotate(45deg); display: grid; place-items: center; font: 800 15px var(--mono); color: var(--c); background: #0a0c16; border: 2px solid var(--c); box-shadow: 0 0 12px var(--c), inset 0 0 8px var(--c); }
+.token b { transform: rotate(-45deg); text-shadow: 0 0 6px var(--c); }
+.unit.player .token { border-radius: 50%; transform: none; }
+.unit.player .token b { transform: none; }
+.eye { position: absolute; left: 50%; top: 50%; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-bottom: 9px solid var(--gold); transform: translate(-50%, -50%) rotate(var(--rot)) translateY(-20px); filter: drop-shadow(0 0 4px var(--gold)); transition: transform .15s; z-index: 1; }
+.unit.aware .eye { border-bottom-color: var(--red); filter: drop-shadow(0 0 4px var(--red)); }
+.unit.haskey::after { content: 'KEY'; position: absolute; left: -3px; bottom: 7px; padding: 0 3px; border-radius: 2px; background: var(--gold); color: #12100a; font: 800 9px/14px var(--mono); letter-spacing: .5px; box-shadow: 0 0 8px var(--gold); z-index: 2; }
+.ok { color: #4dff9a; }
+.mini-btn { padding: 1px 6px; margin-left: 6px; font: 600 11px var(--mono); }
+.buff { font: 600 11px var(--mono); color: #4dff9a; margin: -1px 0 3px; }
+.tile.exit.locked { background: repeating-linear-gradient(45deg, #2a0610 0 5px, #1f0a10 5px 10px); box-shadow: inset 0 0 0 2px #ff3b6b, inset 0 0 14px rgba(255,59,107,.5); }
+.tile.exit.locked span { color: #ff3b6b; text-shadow: 0 0 6px #ff3b6b; font-size: 9px; letter-spacing: .5px; }
+.unit.enemy:not(.aware) .token { box-shadow: 0 0 6px var(--c); }
+.unit.acting .token { box-shadow: 0 0 0 3px #fff, 0 0 20px var(--c); }
+.unit.hit .token { animation: shake .3s; }
+.unit.dead { opacity: 0; }
+.hp { position: absolute; left: 9px; right: 9px; bottom: 2px; height: 5px; background: rgba(0,0,0,.65); border-radius: 3px; overflow: hidden; }
+.hp i { display: block; height: 100%; background: #4dff9a; box-shadow: 0 0 6px #4dff9a; transition: width .2s; }
+.hpnum { position: absolute; right: 0; top: 0; min-width: 18px; height: 16px; padding: 0 4px; border-radius: 2px; background: #05060c; border: 1px solid #3a4266; font: 700 11px var(--mono); display: grid; place-items: center; z-index: 1; }
+@keyframes shake { 0%,100% { translate: 0; filter: brightness(1); } 25% { translate: -4px; filter: brightness(2.2) hue-rotate(40deg); } 75% { translate: 4px; } }
+
+.intent { position: absolute; transform: translate(-50%, calc(-100% + 8px)); background: rgba(8,10,20,.92); color: var(--ink); border: 1px solid var(--red); border-radius: 3px; padding: 2px 7px; font: 11px/1.25 var(--mono); white-space: nowrap; text-align: center; box-shadow: 0 0 8px rgba(255,46,151,.4); z-index: 10; transition: left .14s linear, top .14s linear; }
+.intent:empty { display: none; }
+.intent span { display: block; }
+.intent .m { color: var(--blue); font-weight: 600; }
+.intent .idle { color: var(--muted); font-style: italic; }
+.intent .a { color: #ff5ca8; font-weight: 800; }
+.intent small { font-weight: 600; color: var(--gold); }
+.intent.acting { border-color: var(--gold); box-shadow: 0 0 12px rgba(248,225,74,.6); }
+
+.float { position: absolute; transform: translate(-50%, -50%); font: 800 20px var(--mono); pointer-events: none; animation: rise .9s ease-out forwards; z-index: 20; }
+.float.dmg { color: #ff2e97; text-shadow: 0 0 8px #ff2e97, 0 2px 0 #000; }
+.float.alert { color: var(--gold); font-size: 30px; text-shadow: 0 0 10px var(--gold), 0 2px 0 #000; }
+.float.heal { color: #4dff9a; text-shadow: 0 0 8px #4dff9a, 0 2px 0 #000; }
+@keyframes rise { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -36px; } }
+.shot { position: absolute; width: 14px; height: 4px; border-radius: 2px; background: #fff; box-shadow: 0 0 6px var(--c), 0 0 14px var(--c); transform: translate(-50%, -50%); transition: left .2s linear, top .2s linear; z-index: 15; }
+
+#side { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 12px; font-size: 13px; }
+#side .panel { padding: 10px; }
+.panel { background: var(--panel); border: 1px solid #23294a; border-left: 2px solid var(--blue); border-radius: 3px; padding: 12px; }
+.row { display: flex; justify-content: space-between; padding: 2px 0; font-family: var(--mono); }
+.hpbig { position: relative; height: 22px; margin-top: 8px; background: #05060c; border: 1px solid #23294a; overflow: hidden; }
+.hpbig i { position: absolute; inset: 0 auto 0 0; background: linear-gradient(90deg, #12a85f, #4dff9a); box-shadow: 0 0 10px #4dff9a; transition: width .25s; }
+.hpbig span { position: relative; display: block; text-align: center; line-height: 20px; font: 700 13px/20px var(--mono); color: #04140b; }
+.mini { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+.lost { color: #ff5ca8; }
+.note { color: var(--muted); font-size: 12px; margin-top: 6px; border-top: 1px solid #23294a; padding-top: 6px; }
+.key { display: inline-block; width: 11px; height: 11px; margin: 0 5px -1px 0; border-radius: 2px; }
+.key.seen { background: rgba(248,225,74,.45); }
+.key.next { background: rgba(177,77,255,.55); margin-left: 8px; }
+.log { font: 12px var(--mono); color: #8f9ac4; max-height: 190px; overflow: hidden; }
+.log div::before { content: '> '; color: var(--red); }
+.log div { padding: 1px 0; }
+.log div:last-child { color: var(--ink); }
+
+#bar { display: flex; align-items: center; gap: 14px; margin: 14px 0 10px; min-height: 44px; flex-wrap: wrap; }
+.hint { flex: 1; color: #b7c0e0; min-width: 260px; }
+.hint b { color: var(--blue); }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { padding: 6px 12px; border-radius: 3px; border: 1px solid #2c3354; background: #11152a; font: 13px var(--mono); }
+.chip.atk { border-color: var(--red); color: #ff8cc4; }
+.chip.mv { border-color: var(--blue); color: #8ef1ff; }
+.chip.active { background: #1d2342; box-shadow: 0 0 0 1px var(--gold), 0 0 12px rgba(248,225,74,.45); }
+.chip.used { opacity: .4; }
+.chip.empty { color: var(--muted); border-style: dashed; }
+
+/* All cards on one row: they shrink to fit instead of wrapping. */
+#hand { display: flex; gap: 8px; flex-wrap: nowrap; min-height: 132px; }
+#hand .card { flex: 1 1 0; min-width: 0; max-width: 136px; height: 130px; }
+#hand .card .name { font-size: 10px; letter-spacing: .5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hand .card .big { font-size: 14px; }
+#hand .card .sub { font-size: 10px; }
+#hand.locked .card { pointer-events: none; }
+.card { width: 136px; height: 150px; border-radius: 4px; background: #0d1020; color: var(--ink); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #2c3354; box-shadow: 0 6px 18px rgba(0,0,0,.6); cursor: pointer; transition: transform .12s, box-shadow .12s, filter .2s; clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+.card:hover { transform: translateY(-4px); box-shadow: 0 0 16px rgba(34,228,255,.25); }
+.half { flex: 1; padding: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid transparent; background: linear-gradient(160deg, #2a0f2a, #150c1f); }
+.card.sel .half { border-color: var(--gold); background: linear-gradient(160deg, #3a3510, #1e1b08); box-shadow: inset 0 0 14px rgba(248,225,74,.35); }
+.card.used { filter: brightness(.35) grayscale(.8); cursor: default; }
+.card.used:hover { transform: none; box-shadow: 0 6px 18px rgba(0,0,0,.6); }
+#hand.burning .card { filter: none; cursor: pointer; }
+#hand.burning .card.sel .half { border-color: #ff3b3b; background: linear-gradient(160deg, #3a0f0f, #1e0808); box-shadow: inset 0 0 14px rgba(255,59,59,.5); }
+.name { text-align: center; font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: 1.5px; background: #05060c; color: var(--blue); padding: 3px; border-top: 1px solid #2c3354; }
+.big { font: 800 16px var(--mono); color: #ff5ca8; text-shadow: 0 0 6px rgba(255,46,151,.5); }
+.big.heal { color: #4dff9a; text-shadow: 0 0 6px rgba(77,255,154,.5); }
+.big.dash { color: var(--blue); text-shadow: 0 0 6px rgba(34,228,255,.5); }
+.sub { font-size: 11px; color: #8f9ac4; }
+.sub.heal { color: #4dff9a; font-weight: 700; font-size: 12px; }
+.rangeicon { font: 700 22px var(--mono); margin-top: 2px; color: #ff5ca8; }
+.diag { display: grid; grid-template-columns: repeat(5, 9px); gap: 2px; margin-top: 5px; }
+.diag i { width: 9px; height: 9px; background: rgba(255,255,255,.06); border-radius: 1px; }
+.diag i.me { background: var(--blue); box-shadow: 0 0 4px var(--blue); }
+.diag i.hit { background: var(--red); box-shadow: 0 0 4px var(--red); }
+.diag i.opt { background: rgba(255,46,151,.4); }
+
+#toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); background: #11131f; border: 1px solid var(--blue); box-shadow: 0 0 14px rgba(34,228,255,.3); padding: 10px 16px; border-radius: 3px; font-family: var(--mono); opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; }
+#toast.show { opacity: 1; }
+#modal { position: fixed; inset: 0; background: rgba(3,4,10,.75); display: grid; place-items: center; z-index: 60; }
+#modal[hidden] { display: none; }
+#modal .box { background: var(--panel); border: 1px solid var(--red); padding: 24px 28px; border-radius: 3px; text-align: center; min-width: 300px; box-shadow: 0 0 30px rgba(255,46,151,.3); }
+#modal h2 { margin: 0 0 8px; font-family: var(--mono); letter-spacing: 3px; text-transform: uppercase; color: var(--blue); text-shadow: 0 0 10px rgba(34,228,255,.6); }
+#modal p { color: #b7c0e0; margin: 0 0 18px; }
+.chars { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
+.char { display: flex; flex-direction: column; align-items: center; gap: 6px; width: 230px; padding: 16px; text-align: center; background: #0d1020; border: 1px solid #2c3354; border-radius: 4px; cursor: pointer; }
+.char:hover, .char:focus-visible { border-color: var(--gold); box-shadow: 0 0 16px rgba(248,225,74,.35); }
+.char-name { font: 800 18px var(--mono); letter-spacing: 2px; text-transform: uppercase; color: var(--blue); }
+.char-blurb { color: #b7c0e0; font-size: 13px; }
+.char-stats { display: flex; gap: 14px; font: 13px var(--mono); color: var(--muted); }
+.char-stats b { color: var(--gold); font-size: 16px; }
+.char-sig { font: 11px var(--mono); color: var(--muted); text-transform: uppercase; letter-spacing: 1px; margin-top: 4px; }
+.char .card { pointer-events: none; }
+#modal .box.wide { max-width: min(820px, calc(100vw - 32px)); }
+.keep-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 10px; }
+.keep-grid .card.dropped { filter: brightness(.35) grayscale(.8); }
+.keep-grid .card.dropped:hover { filter: brightness(.6) grayscale(.5); }
+.keep-count { font: 700 14px var(--mono); color: var(--gold) !important; margin: 0 0 12px !important; }
+#modal .reward { display: flex; justify-content: center; margin: -6px 0 20px; pointer-events: none; }
+#modal .reward .card { box-shadow: 0 0 24px rgba(248,225,74,.45); }
+.intent .stun { color: var(--gold); font-weight: 800; }
+.float.stun { color: var(--gold); font-size: 16px; text-shadow: 0 0 8px var(--gold), 0 2px 0 #000; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>Neon Crawl <span>// Corporate Tower</span></h1>
+    <div class="spacer"></div>
+    <button data-act="restart">Restart floor</button>
+  </header>
+  <div id="layout">
+    <main id="main">
+      <div id="viewport"><div id="board"></div></div>
+      <div id="bar"></div>
+      <div id="hand"></div>
+    </main>
+    <aside id="side"></aside>
+  </div>
+</div>
+<div id="toast"></div>
+<div id="modal" hidden></div>
+
+<script>
+// ---------- Tuning ----------
+const T = 46;
+const MAX_HP = 18;
+
+// Attack shapes, written facing "up" (y = -1). Rotated to face the chosen direction.
+const SHAPES = {
+  arc:  [[-1, -1], [0, -1], [1, -1]],
+  line: [[0, -1], [0, -2], [0, -3]],
+  cone: [[0, -1], [-1, -2], [0, -2], [1, -2]],
+};
+const SHAPE_NAMES = { arc: 'Sweep', line: 'Pierce', cone: 'Cone', ring: 'Whirl' };
+
+// How many cards you start every floor with.
+const DECK_SIZE = 8;
+
+// Each card is one action. 'self' actions need no target: heal restores HP, move gives extra steps this turn.
+// Cards every character starts with: a stun (enemy skips its next turn and can't see), a heal,
+// a pickpocket (rob an enemy that hasn't spotted you) and a lockpick (open an adjacent door quietly).
+const SHARED_CARDS = [
+  { id: 5, name: 'Neural Jolt', action: { type: 'melee', dmg: 0, stun: 1 } },
+  { id: 6, name: 'Med-Patch',   action: { type: 'self', heal: 2 } },
+  { id: 7, name: 'Pickpocket',  action: { type: 'melee', dmg: 0, steal: true } },
+  { id: 8, name: 'Lockpick',    action: { type: 'melee', dmg: 0, pick: true } },
+];
+
+// Playable characters. strength = damage of the basic Melee Attack card, move = free steps every turn.
+// Each starts with 3 Melee Attacks, their own signature card, and the shared cards above.
+const CHARACTERS = {
+  soldier: {
+    name: 'Soldier', blurb: 'Hits hard and carries a silenced pistol.', strength: 4, move: 3,
+    signature: { id: 4, name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5 } },
+  },
+  infiltrator: {
+    name: 'Infiltrator', blurb: 'Fast and quiet, weaker in a fight.', strength: 3, move: 4,
+    signature: { id: 4, name: 'Sprint', action: { type: 'self', move: 3 } },
+  },
+};
+
+const startingDeck = ch => [
+  ...[1, 2, 3].map(id => ({ id, name: 'Melee Attack', action: { type: 'melee', dmg: ch.strength } })),
+  ch.signature,
+  ...SHARED_CARDS,
+];
+
+// After each floor you get one random card from here that you don't already own.
+const REWARD_CARDS = [
+  { id: 11, name: 'Mono-Katana',  action: { type: 'melee', dmg: 4 } },
+  { id: 12, name: 'Smartpistol',  action: { type: 'ranged', dmg: 2, range: 4 } },
+  { id: 13, name: 'Arc Blade',    action: { type: 'shape', shape: 'arc', dmg: 3 } },
+  { id: 14, name: 'Rail Spike',   action: { type: 'shape', shape: 'line', dmg: 3 } },
+  { id: 15, name: 'EMP Pulse',    action: { type: 'shape', shape: 'ring', dmg: 0, stun: 1 } },
+  { id: 16, name: 'Smart Rifle',  action: { type: 'ranged', dmg: 3, range: 5 } },
+  { id: 17, name: 'Overclock',    action: { type: 'self', move: 4 } },
+  { id: 18, name: 'Scattergun',   action: { type: 'shape', shape: 'cone', dmg: 2 } },
+  { id: 20, name: 'Taser Dart',   action: { type: 'ranged', dmg: 0, stun: 1, range: 4 } },
+  { id: 21, name: 'Nano-Stim',    action: { type: 'self', heal: 4 } },
+];
+
+// What a successful pickpocket finds (the rest of the time: nothing). A stim is a free-action heal.
+const LOOT_ODDS = { card: 0.15, creds: 0.3, stim: 0.2, serum: 0.1 };
+const STIM_HEAL = 3;
+
+// Serums: drink one and the bonus lasts this turn plus the next ones, SERUM_TURNS turns in all.
+const SERUM_TURNS = 3;
+const SERUMS = {
+  speed:    { name: 'Speed serum',    bonus: 2, desc: 'move' },
+  strength: { name: 'Strength serum', bonus: 2, desc: 'damage' },
+};
+
+// Every hit (yours and enemies') has this chance to land 1 off its listed damage, half up and half down.
+const DMG_VARIANCE = 0.5;
+const rollDmg = n => {
+  if (n <= 0) return 0;
+  const r = Math.random();
+  return Math.max(1, n + (r < DMG_VARIANCE / 2 ? -1 : r < DMG_VARIANCE ? 1 : 0));
+};
+
+// Doors ('+' on the map) block movement and sight until smashed (DOOR_HP) or lockpicked.
+const DOOR_HP = 5;
+
+// Furniture you can smash with damaging attacks, per floor theme. Each one leaves a pickup on its tile:
+// walk over it to take it. Floors not listed here have furniture that can't be broken.
+const BREAKABLES = {
+  pharma:  { name: 'vat',   hp: 4, drop: 'stim' },
+  weapons: { name: 'crate', hp: 6, drop: 'gunmod' },
+};
+
+// Gun mods (from crates) add +1 damage each to every gun card (ranged attacks), up to GUN_MOD_MAX.
+const GUN_MOD_MAX = 3;
+const gunBonus = s => s.type === 'ranged' && s.dmg > 0 ? run.gunMods : 0;
+
+// Floors (0-based) whose exit is locked until you take the keycard from the enemy carrying it.
+const KEYCARD_FLOORS = new Set([1]);
+
+// Hitting an enemy that hasn't spotted you multiplies the damage.
+const BACKSTAB_MULT = 2;
+
+// Each round an alerted enemy rolls one of its intents. atk 0 = move only. range = ranged attack.
+// Unaware enemies patrol `patrol` steps per turn (0 = stands guard and turns), seeing `vision` tiles ahead.
+const ENEMY_TYPES = {
+  g: { name: 'Ganger',   glyph: 'G', hp: 6,  color: '#ff3b6b', vision: 4, patrol: 2, intents: [{ move: 3, atk: 2 }, { move: 2, atk: 3 }, { move: 4, atk: 1 }] },
+  d: { name: 'Drone',    glyph: 'D', hp: 4,  color: '#ff9f1c', vision: 5, patrol: 2, intents: [{ move: 2, atk: 2, range: 4 }, { move: 1, atk: 3, range: 5 }, { move: 3, atk: 1, range: 4 }] },
+  e: { name: 'Enforcer', glyph: 'E', hp: 10, color: '#b14dff', vision: 3, patrol: 0, intents: [{ move: 2, atk: 4 }, { move: 1, atk: 5 }, { move: 4, atk: 0 }] },
+};
+
+// The corporate tower: three generated floors. Each floor is one rectangular office building: a grid of
+// two-wide corridors, with the blocks between them cut into rooms by walls one tile thick. A fixed seed means
+// the same layout every time you play that floor. vCorridors = north-south corridors crossing the east-west
+// one, extraDoors = chance each extra wall between two spaces also gets a door (more routes around),
+// enemyChance / lootChance = chance a room has a person / a cache, guards = extra corridor patrols, mix = enemy letters,
+// loot = odds for what a cache holds.
+// Walking distance from the start to the exit: about 15 turns at Move 3.
+const EXIT_STEPS = 45;
+
+const FLOORS = [
+  { name: 'Pharma Labs',     theme: 'pharma',  cache: 'a medicine cabinet', seed: 1101, w: 40, h: 28, vCorridors: 2,
+    extraDoors: 0.3, enemyChance: 0.35, lootChance: 0.6, guards: 1, mix: 'ggd',   loot: { card: 0.15, creds: 0.25, stim: 0.35, serum: 0.25 } },
+  { name: 'Weapons Foundry', theme: 'weapons', cache: 'a weapons locker',   seed: 2202, w: 46, h: 30, vCorridors: 2,
+    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, mix: 'gggde', loot: { card: 0.35, creds: 0.4, stim: 0.15, serum: 0.1 } },
+  { name: 'Droid Assembly',  theme: 'droids',  cache: 'a parts bin',        seed: 3303, w: 50, h: 34, vCorridors: 3,
+    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.45, guards: 3, mix: 'gddde', loot: { card: 0.2, creds: 0.45, stim: 0.25, serum: 0.1 } },
+];
+
+function mulberry32(a) {
+  return () => {
+    a = a + 0x6D2B79F5 | 0;
+    let t = Math.imul(a ^ a >>> 15, 1 | a);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// Builds a floor as map rows: # wall, . floor, + door, o furniture (blocks movement and sight), $ loot cache,
+// P player, X exit, g/d/e enemies (ganger, drone, enforcer).
+function generateFloor(f) {
+  const rng = mulberry32(f.seed);
+  const ri = (a, b) => a + Math.floor(rng() * (b - a + 1)), pick = a => a[Math.floor(rng() * a.length)];
+  const W = f.w, H = f.h;
+  const g = Array.from({ length: H }, (_, y) =>
+    Array.from({ length: W }, (_, x) => x === 0 || y === 0 || x === W - 1 || y === H - 1 ? '#' : '.'));
+  const wallLine = (x0, y0, x1, y1) => { for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) g[y][x] = '#'; };
+
+  // Corridors: one east-west through the middle and vCorridors north-south ones, all two tiles wide.
+  const isCorr = Array.from({ length: H }, () => Array(W).fill(false));
+  const hy = (H >> 1) - 1, vxs = [];
+  for (let x = 1; x < W - 1; x++) isCorr[hy][x] = isCorr[hy + 1][x] = true;
+  for (let k = 1; k <= f.vCorridors; k++) {
+    const vx = Math.round(k * W / (f.vCorridors + 1)) - 1 + ri(-1, 1);
+    vxs.push(vx);
+    for (let y = 1; y < H - 1; y++) isCorr[y][vx] = isCorr[y][vx + 1] = true;
+  }
+
+  // Blocks between corridors: wall off each side that faces a corridor, then cut the rest into rooms.
+  const split = (x0, y0, x1, y1) => {
+    const w = x1 - x0 + 1, h = y1 - y0 + 1, canV = w >= 7, canH = h >= 7;
+    if (!(w > 10 || h > 8 || (w * h > 45 && rng() < 0.5)) || (!canV && !canH)) return;
+    if (canV && (!canH || w > h || (w === h && rng() < 0.5))) {
+      const sx = ri(x0 + 3, x1 - 3);
+      wallLine(sx, y0, sx, y1); split(x0, y0, sx - 1, y1); split(sx + 1, y0, x1, y1);
+    } else {
+      const sy = ri(y0 + 3, y1 - 3);
+      wallLine(x0, sy, x1, sy); split(x0, y0, x1, sy - 1); split(x0, sy + 1, x1, y1);
+    }
+  };
+  const segs = (n, cuts) => {
+    const out = [];
+    let a = 1;
+    for (const c of cuts) { out.push([a, c - 1]); a = c + 2; }
+    out.push([a, n - 2]);
+    return out;
+  };
+  for (const [bx0, bx1] of segs(W, vxs)) for (const [by0, by1] of segs(H, [hy])) {
+    let x0 = bx0, x1 = bx1, y0 = by0, y1 = by1;
+    if (bx0 > 1) { wallLine(bx0, by0, bx0, by1); x0++; }
+    if (bx1 < W - 2) { wallLine(bx1, by0, bx1, by1); x1--; }
+    if (by0 > 1) { wallLine(bx0, by0, bx1, by0); y0++; }
+    if (by1 < H - 2) { wallLine(bx0, by1, bx1, by1); y1--; }
+    split(x0, y0, x1, y1);
+  }
+
+  // Label the open spaces: the corridor network is one space, every room is its own.
+  const region = Array.from({ length: H }, () => Array(W).fill(-1)), spaces = [];
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (g[y][x] !== '.' || region[y][x] >= 0) continue;
+    const id = spaces.length, cells = [[x, y]];
+    region[y][x] = id;
+    for (let i = 0; i < cells.length; i++) {
+      const [cx, cy] = cells[i];
+      for (const [dx, dy] of DIRS) {
+        const nx = cx + dx, ny = cy + dy;
+        if (g[ny][nx] === '.' && region[ny][nx] < 0) { region[ny][nx] = id; cells.push([nx, ny]); }
+      }
+    }
+    const xs = cells.map(c => c[0]), ys = cells.map(c => c[1]);
+    const x0 = Math.min(...xs), y0 = Math.min(...ys), x1 = Math.max(...xs), y1 = Math.max(...ys);
+    spaces.push({ id, cells, corridor: cells.some(([cx, cy]) => isCorr[cy][cx]),
+      x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, cx: (x0 + x1) >> 1, cy: (y0 + y1) >> 1 });
+  }
+
+  // Doors go in straight wall tiles between two different spaces. Every space gets connected (a random
+  // spanning tree), plus some extra connections for alternate routes. A quarter are open doorways.
+  const cand = new Map();
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    if (g[y][x] !== '#') continue;
+    for (const [dx, dy] of [[1, 0], [0, 1]]) {
+      const a = region[y - dy][x - dx], b = region[y + dy][x + dx];
+      if (a < 0 || b < 0 || a === b || g[y - dx][x - dy] !== '#' || g[y + dx][x + dy] !== '#') continue;
+      const k = Math.min(a, b) + ',' + Math.max(a, b);
+      if (!cand.has(k)) cand.set(k, []);
+      cand.get(k).push([x, y]);
+    }
+  }
+  const edges = [...cand.keys()];
+  for (let i = edges.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [edges[i], edges[j]] = [edges[j], edges[i]]; }
+  const parent = spaces.map((_, i) => i), find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+  for (const k of edges) {
+    const [a, b] = k.split(',').map(Number), ra = find(a), rb = find(b);
+    if (ra === rb && rng() >= f.extraDoors) continue;
+    parent[ra] = rb;
+    const [x, y] = pick(cand.get(k));
+    g[y][x] = rng() < 0.75 ? '+' : '.';
+  }
+
+  // Start in the leftmost room; the exit goes in the room whose walking distance is closest to EXIT_STEPS.
+  const rooms = spaces.filter(s => !s.corridor);
+  const start = rooms.reduce((a, b) => b.cx < a.cx || (b.cx === a.cx && Math.abs(b.cy - hy) < Math.abs(a.cy - hy)) ? b : a);
+  const dist = Array.from({ length: H }, () => Array(W).fill(-1)), q = [[start.cx, start.cy]];
+  dist[start.cy][start.cx] = 0;
+  while (q.length) {
+    const [x, y] = q.shift();
+    for (const [dx, dy] of DIRS) {
+      const nx = x + dx, ny = y + dy;
+      if (g[ny][nx] === '#' || dist[ny][nx] >= 0) continue;
+      dist[ny][nx] = dist[y][x] + 1; q.push([nx, ny]);
+    }
+  }
+  const off = r => Math.abs(dist[r.cy][r.cx] - EXIT_STEPS);
+  const exitRoom = rooms.filter(r => r !== start).reduce((a, b) => off(b) < off(a) ? b : a);
+  g[start.cy][start.cx] = 'P';
+  g[exitRoom.cy][exitRoom.cx] = 'X';
+
+  const freeTile = r => {
+    for (let i = 0; i < 60; i++) {
+      const x = ri(r.x, r.x + r.w - 1), y = ri(r.y, r.y + r.h - 1);
+      if (g[y][x] === '.') return [x, y];
+    }
+    return null;
+  };
+  for (const r of rooms) {
+    // Furniture: lone blocks with open floor all around, so they give cover but never block a doorway.
+    for (let i = 0; i < Math.floor(r.w * r.h / 10); i++) {
+      const x = ri(r.x + 1, r.x + r.w - 2), y = ri(r.y + 1, r.y + r.h - 2);
+      let open = true;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (g[y + dy][x + dx] !== '.') open = false;
+      if (open) g[y][x] = 'o';
+    }
+    if (r === start) continue;
+    const n = (rng() < f.enemyChance ? 1 : 0) + (r === exitRoom ? 1 : 0);
+    for (let i = 0; i < n; i++) { const p = freeTile(r); if (p) g[p[1]][p[0]] = pick([...f.mix]); }
+    const p = freeTile(r);
+    if (p && rng() < f.lootChance) g[p[1]][p[0]] = '$';
+  }
+  const far = spaces.filter(s => s.corridor).flatMap(s => s.cells)
+    .filter(([x, y]) => g[y][x] === '.' && Math.abs(x - start.cx) + Math.abs(y - start.cy) > 10);
+  for (let i = 0; i < f.guards && far.length; i++) {
+    const [x, y] = far.splice(Math.floor(rng() * far.length), 1)[0];
+    g[y][x] = pick([...f.mix]);
+  }
+  return g.map(row => row.join(''));
+}
+
+const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
+const MAPS = FLOORS.map(generateFloor);
+
+// ---------- Helpers ----------
+const $ = s => document.querySelector(s);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+// Animation delay that's skipped while an off-screen enemy acts, so big floors don't drag.
+const pause = ms => sleep(S.fast ? 0 : ms);
+const key = (x, y) => x + ',' + y;
+const unkey = k => k.split(',').map(Number);
+const manh = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+const doorAt = (x, y) => S.doors.has(key(x, y));
+const vatAt = (x, y) => S.vats.has(key(x, y));
+// Solid for movement and sight: walls, furniture and closed doors.
+const isWall = (x, y) => x < 0 || y < 0 || x >= S.w || y >= S.h || S.walls[y][x] || doorAt(x, y);
+const enemyAt = (x, y) => S.enemies.find(e => e.hp > 0 && e.x === x && e.y === y);
+const isDirectional = s => s.type === 'shape' && s.shape !== 'ring';
+const nameOf = u => u.id === 'p' ? 'You' : ENEMY_TYPES[u.kind].name;
+
+function bfs(sx, sy, pass, maxD = Infinity) {
+  const dist = new Map([[key(sx, sy), 0]]), prev = new Map(), q = [[sx, sy]];
+  while (q.length) {
+    const [x, y] = q.shift(), d = dist.get(key(x, y));
+    if (d >= maxD) continue;
+    for (const [dx, dy] of DIRS) {
+      const nx = x + dx, ny = y + dy, k = key(nx, ny);
+      if (dist.has(k) || !pass(nx, ny)) continue;
+      dist.set(k, d + 1); prev.set(k, key(x, y)); q.push([nx, ny]);
+    }
+  }
+  return { dist, prev };
+}
+
+function pathTo(prev, sx, sy, tx, ty) {
+  const path = [], start = key(sx, sy);
+  for (let k = key(tx, ty); k !== start; k = prev.get(k)) path.push(unkey(k));
+  return path.reverse();
+}
+
+// Line of sight: sample along the line between tile centers; walls block, units don't.
+// The target tile itself doesn't count, so you can shoot at a door.
+function los(a, b) {
+  const x0 = a.x + .5, y0 = a.y + .5, x1 = b.x + .5, y1 = b.y + .5;
+  const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 6);
+  for (let i = 1; i < n; i++) {
+    const t = i / n, x = Math.floor(x0 + (x1 - x0) * t), y = Math.floor(y0 + (y1 - y0) * t);
+    if ((x !== b.x || y !== b.y) && isWall(x, y)) return false;
+  }
+  return true;
+}
+
+function rot(x, y, [dx, dy]) {
+  if (dy === -1) return [x, y];
+  if (dx === 1) return [-y, x];
+  if (dy === 1) return [-x, -y];
+  return [y, -x];
+}
+
+// Tiles an attack can reach (floor, or a door). With no dir, directional shapes return the union of all four facings.
+function atkTiles(s, from, dir) {
+  const out = [], seen = new Set();
+  const add = (x, y) => {
+    const k = key(x, y);
+    if ((isWall(x, y) && !doorAt(x, y) && !vatAt(x, y)) || seen.has(k) || (x === from.x && y === from.y)) return;
+    seen.add(k); out.push({ x, y });
+  };
+  if (s.type === 'self') return out;
+  if (s.type === 'melee') DIRS.forEach(([dx, dy]) => add(from.x + dx, from.y + dy));
+  else if (s.type === 'ranged') {
+    for (let y = from.y - s.range; y <= from.y + s.range; y++) for (let x = from.x - s.range; x <= from.x + s.range; x++) {
+      const d = manh({ x, y }, from);
+      if (d >= 1 && d <= s.range && los(from, { x, y })) add(x, y);
+    }
+  } else if (s.shape === 'ring') {
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) add(from.x + dx, from.y + dy);
+  } else {
+    for (const d of dir ? [dir] : DIRS) {
+      for (const [sx, sy] of SHAPES[s.shape]) {
+        const [rx, ry] = rot(sx, sy, d), x = from.x + rx, y = from.y + ry;
+        if (s.shape === 'line' && isWall(x, y)) { add(x, y); break; }
+        add(x, y);
+      }
+    }
+  }
+  return out;
+}
+
+const turnRight = ([dx, dy]) => [-dy, dx];
+const turnLeft = ([dx, dy]) => [dy, -dx];
+
+// Vision cone: up to `vision` tiles ahead, widening by one tile to each side every two tiles. Walls block.
+function visionTiles(e) {
+  if (e.stunned) return [];
+  const [fx, fy] = e.facing, [px, py] = turnRight(e.facing), out = [];
+  for (let f = 1; f <= ENEMY_TYPES[e.kind].vision; f++) {
+    const w = Math.floor(f / 2);
+    for (let l = -w; l <= w; l++) {
+      const x = e.x + fx * f + px * l, y = e.y + fy * f + py * l;
+      if (!isWall(x, y) && los(e, { x, y })) out.push({ x, y });
+    }
+  }
+  return out;
+}
+const sees = (e, u) => visionTiles(e).some(t => t.x === u.x && t.y === u.y);
+
+// Start facing an open direction that doesn't already see the player.
+function initFacing(e) {
+  const ok = DIRS.filter(d => { e.facing = d; return !sees(e, S.player) && !isWall(e.x + d[0], e.y + d[1]); });
+  const pool = ok.length ? ok : DIRS;
+  e.facing = pool[Math.floor(Math.random() * pool.length)];
+}
+
+function rollIntent(e) {
+  const opts = ENEMY_TYPES[e.kind].intents;
+  e.intent = opts[Math.floor(Math.random() * opts.length)];
+}
+
+function alertEnemy(e) {
+  if (e.alerted) return;
+  e.alerted = true;
+  const dx = S.player.x - e.x, dy = S.player.y - e.y;
+  e.facing = Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
+  // Spotted during your turn: it acts this enemy phase. Spotted on its own turn: it acts next round.
+  if (S.phase === 'enemy') { e.intent = null; e.fresh = true; } else rollIntent(e);
+  floatText(e, '!', 'alert');
+  log(`${nameOf(e)} spotted you!`);
+  renderUnits(); renderOverlays();
+}
+
+function checkSight() {
+  for (const e of S.enemies) if (!e.alerted && sees(e, S.player)) alertEnemy(e);
+}
+
+const moveReach = n => bfs(S.player.x, S.player.y, (x, y) => !isWall(x, y) && !enemyAt(x, y), n);
+const reachTiles = n => [...moveReach(n).dist.keys()].filter(k => k !== key(S.player.x, S.player.y)).map(k => { const [x, y] = unkey(k); return { x, y }; });
+
+function dirTo(x, y) {
+  const dx = x - S.player.x, dy = y - S.player.y;
+  if (!dx && !dy) return null;
+  return Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
+}
+
+const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${s.move}` : '', s.heal ? `Heal ${s.heal}` : '']
+  .filter(Boolean).join(' + ');
+const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}`;
+
+// ---------- State ----------
+let S = null;
+let deck = [];  // the run's deck; set by the character you pick, grows as you find cards
+let run = null;  // the character you play plus loot that carries across floors
+const unitEls = new Map();
+
+// Start of a run: pick who you play. Sets the starting deck and stats, then opens floor 1.
+function chooseCharacter() {
+  run = null;
+  const m = $('#modal');
+  m.innerHTML = `<div class="box wide"><h2>Choose your operative</h2>
+    <p>Get through the corporate tower. Pick who goes in.</p>
+    <div class="chars">${Object.entries(CHARACTERS).map(([k, ch]) => `
+      <button class="char" data-char="${k}">
+        <span class="char-name">${ch.name}</span>
+        <span class="char-blurb">${ch.blurb}</span>
+        <span class="char-stats"><span>Strength <b>${ch.strength}</b></span><span>Move <b>${ch.move}</b></span></span>
+        <span class="char-sig">Own card:</span>
+        <span class="card">${cardHTML(ch.signature)}</span>
+      </button>`).join('')}</div></div>`;
+  m.querySelectorAll('[data-char]').forEach(b => b.onclick = e => {
+    e.stopPropagation();
+    const ch = CHARACTERS[b.dataset.char];
+    run = { char: ch, creds: 0, stims: 0, speed: 0, strength: 0, gunMods: 0 };
+    deck = startingDeck(ch);
+    m.hidden = true;
+    loadRoom(0);
+  });
+  m.hidden = false;
+}
+
+function loadRoom(idx) {
+  const rows = MAPS[idx];
+  // Every floor starts with exactly DECK_SIZE cards: with more, you first pick which ones to take along.
+  if (deck.length > DECK_SIZE) return chooseKeep(idx);
+  S = {
+    room: idx, w: rows[0].length, h: rows.length, walls: [], enemies: [], player: null,
+    cards: deck.map(c => ({ ...c, used: false })), burned: 0, playing: null,
+    round: 0, phase: 'turn', sel: null, act: null,
+    preview: null, hoverDir: null, busy: false, log: [],
+    doors: new Map(), props: new Set(), vats: new Map(), drops: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
+  };
+  let n = 0;
+  rows.forEach((row, y) => {
+    S.walls.push([...row].map((c, x) => {
+      if (c === 'P') S.player = { id: 'p', x, y, hp: MAX_HP, max: MAX_HP };
+      else if (c === 'X') S.exit = { x, y };
+      else if (c === '+') S.doors.set(key(x, y), DOOR_HP);
+      else if (c === 'o') {
+        S.props.add(key(x, y));
+        if (S.breakable) S.vats.set(key(x, y), S.breakable.hp);
+      }
+      else if (c === '$') S.loot.add(key(x, y));
+      else if (ENEMY_TYPES[c]) S.enemies.push({ id: 'e' + n++, kind: c, x, y, hp: ENEMY_TYPES[c].hp, max: ENEMY_TYPES[c].hp, intent: null, alerted: false, facing: [0, 1] });
+      return c === '#' || c === 'o';
+    }));
+  });
+  S.enemies.forEach(initFacing);
+  // Locked floors: one random enemy carries the keycard.
+  S.needKey = KEYCARD_FLOORS.has(idx); S.hasKey = false;
+  if (S.needKey) S.enemies[Math.floor(Math.random() * S.enemies.length)].hasKey = true;
+  buildBoard();
+  log(`Corporate Tower, floor ${idx + 1}: <b>${FLOORS[idx].name}</b>. ${S.enemies.length} hostiles. Find the exit.`);
+  if (S.needKey) log(`The exit is locked. The ${nameOf(S.enemies.find(e => e.hasKey))} marked KEY has the keycard: pickpocket it or take it down.`);
+  startRound();
+}
+
+// Pick exactly DECK_SIZE cards to take onto floor `idx`; the rest are dropped for good.
+// Starts with a suggestion: everything except your weakest attack cards (basic Shock Batons first).
+function chooseKeep(idx) {
+  const byWeakness = deck.filter(c => c.action.dmg > 0).sort((a, b) => a.action.dmg - b.action.dmg || a.id - b.id);
+  const keep = new Set(deck);
+  for (const c of byWeakness) if (keep.size > DECK_SIZE) keep.delete(c);
+  const m = $('#modal');
+  const draw = () => {
+    m.innerHTML = `<div class="box wide"><h2>Pack for floor ${idx + 1}</h2>
+      <p>You can take <b>${DECK_SIZE}</b> cards onto ${FLOORS[idx].name}. Click cards to keep or drop them. Dropped cards are gone for good.</p>
+      <div class="keep-grid">${deck.map((c, i) => `<div class="card ${keep.has(c) ? 'sel' : 'dropped'}" data-keep="${i}">${cardHTML(c)}</div>`).join('')}</div>
+      <p class="keep-count">${keep.size} / ${DECK_SIZE} kept</p>
+      <button class="primary" data-act="keepdone" ${keep.size === DECK_SIZE ? '' : 'disabled'}>Start floor ${idx + 1}</button></div>`;
+    m.querySelectorAll('[data-keep]').forEach(el => el.onclick = () => {
+      const c = deck[+el.dataset.keep];
+      if (keep.has(c)) keep.delete(c); else if (keep.size < DECK_SIZE) keep.add(c);
+      draw();
+    });
+    m.querySelector('[data-act="keepdone"]').onclick = e => {
+      e.stopPropagation();
+      const dropped = deck.filter(c => !keep.has(c)).map(c => c.name);
+      deck = deck.filter(c => keep.has(c));
+      m.hidden = true;
+      loadRoom(idx);
+      log(`You left behind <b>${dropped.join(', ')}</b>.`);
+      renderSide();
+    };
+  };
+  draw();
+  m.hidden = false;
+}
+
+function startRound() {
+  if (!S.cards.length) { render(); return gameOver('You burned through every card.'); }
+  S.round++;
+  for (const e of S.enemies) {
+    e.fresh = false;
+    if (e.alerted) rollIntent(e); else e.intent = null;
+  }
+  // A turn: use one card (click it, then click its target) and move (click a blue tile), in any order.
+  S.phase = 'turn'; S.sel = null; S.playing = null; S.preview = null; S.hoverDir = null;
+  S.act = { atk: null, move: run.char.move + serumBonus('speed'), atkUsed: false, mvUsed: false };
+  // No ready cards left: this turn has to be a rest (no moving, no way out of it).
+  S.forcedRest = !S.cards.some(c => !c.used);
+  if (S.forcedRest) {
+    S.phase = 'burn';
+    toast('Out of cards: you have to rest. Pick a card to burn.');
+  }
+  render();
+}
+
+// During a turn, clicking a ready card picks it as this turn's card (click it again to put it back).
+// Self cards (heals, sprint) take effect at once. While resting, clicking picks the card to burn.
+function pickCard(card) {
+  if (S.busy) return;
+  if (S.phase === 'burn') { S.sel = S.sel === card ? null : card; renderHand(); renderBar(); return; }
+  if (S.phase !== 'turn' || card.used || S.act.atkUsed) return;
+  S.hoverDir = null; S.preview = null;
+  if (S.playing === card) { S.playing = null; S.act.atk = null; return render(); }
+  S.playing = card; S.act.atk = card.action;
+  if (card.action.type === 'self') return useSelf();
+  render();
+}
+
+// Resting replaces the whole turn, so it's only possible before you've moved or used a card.
+function startRest() {
+  const a = S.act;
+  if (S.phase !== 'turn' || S.busy || a.mvUsed || a.atkUsed || !S.cards.some(c => c.used)) return;
+  S.phase = 'burn'; S.sel = null; S.preview = null; S.playing = null; a.atk = null;
+  render();
+}
+
+// Resting takes the whole turn: burn the chosen card for good, every other card is ready again.
+async function confirmRest() {
+  const c = S.sel;
+  if (S.phase !== 'burn' || !c) return;
+  S.cards = S.cards.filter(x => x !== c);
+  S.cards.forEach(x => { x.used = false; });
+  S.burned++;
+  tickSerums();
+  log(`You rest. <b>${c.name}</b> is burned.`);
+  toast(`Rested — <b>${c.name}</b> burned for good.`);
+  await runEnemyPhase();
+}
+
+// Self actions have no target, so they resolve as soon as you pick them.
+function useSelf() {
+  const a = S.act, s = a.atk;
+  if (s.heal) heal(s.heal);
+  if (s.move) {
+    if (a.mvUsed) { a.mvUsed = false; a.move = s.move; } else a.move += s.move;
+    log(`You get ${s.move} extra move.`);
+  }
+  a.atkUsed = true;
+  nextAction();
+}
+
+// Something this card can affect on that tile: an enemy, a door, or a breakable vat.
+const hasTarget = (s, t) => (!s.pick && enemyAt(t.x, t.y)) || (canHitDoor(s) && doorAt(t.x, t.y)) || (s.dmg > 0 && vatAt(t.x, t.y));
+
+// The tiles a click on (x, y) would hit with the picked card, or null if that click isn't a use of it.
+function attackHit(s, x, y) {
+  const P = S.player, inTiles = tiles => tiles.some(t => t.x === x && t.y === y);
+  if (isDirectional(s)) {
+    const d = dirTo(x, y), tiles = d && atkTiles(s, P, d);
+    return tiles && inTiles(tiles) && tiles.some(t => hasTarget(s, t)) ? tiles : null;
+  }
+  const tiles = atkTiles(s, P);
+  if (!inTiles(tiles)) return null;
+  const hit = s.type === 'shape' ? tiles : [{ x, y }];
+  return hit.some(t => hasTarget(s, t)) ? hit : null;
+}
+
+// ---------- Player actions ----------
+// A click on the board uses the picked card if it lands on something the card can hit; otherwise it moves.
+async function onTileClick(x, y) {
+  if (S.busy || S.phase !== 'turn') return;
+  const a = S.act, P = S.player;
+  if (a.atk && !a.atkUsed) {
+    const hit = attackHit(a.atk, x, y);
+    if (hit) return useAttack(hit);
+  }
+  if (!a.mvUsed) {
+    const { dist, prev } = moveReach(a.move);
+    if (!dist.has(key(x, y)) || (x === P.x && y === P.y)) {
+      if (a.atk && !a.atkUsed && atkTiles(a.atk, P).some(t => t.x === x && t.y === y)) toast('Nothing to hit there.');
+      return;
+    }
+    S.busy = true; renderOverlays();
+    await walk(P, pathTo(prev, P.x, P.y, x, y));
+    a.mvUsed = true;
+    S.busy = false;
+    if (P.x === S.exit.x && P.y === S.exit.y) {
+      if (S.needKey && !S.hasKey) {
+        log('The exit is locked. You need the keycard.');
+        toast('Locked — get the keycard first.');
+      } else {
+        log('You slip out through the exit.');
+        return roomCleared();
+      }
+    }
+    nextAction();
+  }
+}
+
+async function useAttack(hit) {
+  const a = S.act, P = S.player;
+  let s = a.atk;
+  {
+    if (s.dmg > 0) s = { ...s, dmg: s.dmg + gunBonus(s) + serumBonus('strength') };
+    const targets = hit.map(t => !s.pick && enemyAt(t.x, t.y)).filter(Boolean);
+    const doors = hit.filter(t => canHitDoor(s) && doorAt(t.x, t.y));
+    const vats = hit.filter(t => s.dmg > 0 && vatAt(t.x, t.y));
+    S.busy = true; renderOverlays();
+    const first = targets[0] || doors[0] || vats[0];
+    if (s.type === 'ranged') await shot(P, first);
+    else await lunge(P, first);
+    for (const d of doors) hitDoor(d, s);
+    for (const v of vats) hitVat(v, s);
+    for (const e of targets) {
+      if (s.steal) pickpocket(e);
+      // A stun alone doesn't give you away: the enemy just loses its next turn (and can't see meanwhile).
+      if (s.stun) {
+        e.stunned = s.stun;
+        floatText(e, 'STUN', 'stun');
+        log(`You stun ${nameOf(e)}.`);
+      }
+      if (!s.dmg) continue;
+      const sneak = !e.alerted, dmg = rollDmg(s.dmg) * (sneak ? BACKSTAB_MULT : 1);
+      log(sneak ? `Backstab! You hit ${nameOf(e)} for ${dmg}.` : `You hit ${nameOf(e)} for ${dmg}.`);
+      damage(e, dmg);
+      if (e.hp > 0) alertEnemy(e);
+    }
+    renderUnits(); renderOverlays();
+    await sleep(350);
+    a.atkUsed = true; S.busy = false;
+    if (!S.enemies.length) return roomCleared();
+    nextAction();
+  }
+}
+
+// Robbing an enemy that hasn't spotted you: the keycard carrier always gives up the keycard; anyone else
+// rolls on LOOT_ODDS. Each enemy can only be robbed once, and it doesn't notice.
+function pickpocket(e) {
+  if (e.alerted || e.robbed) {
+    log(`${nameOf(e)} ${e.robbed ? 'has nothing left to take' : 'is watching you'}. Pickpocket fails.`);
+    toast(e.robbed ? 'Already robbed.' : 'Pickpocket only works on enemies that haven\'t spotted you.');
+    return;
+  }
+  e.robbed = true;
+  if (e.hasKey) return takeKey(e);
+  grantLoot(e, LOOT_ODDS, `from ${nameOf(e)}`, `${nameOf(e)}'s pockets are empty.`);
+}
+
+// Rolls odds {card, creds, stim} (whatever is left over finds nothing) and gives the result.
+// `at` is where the pop-up text appears; `from` finishes the log line ("from Ganger", "in a parts bin").
+function grantLoot(at, odds, from, emptyMsg) {
+  const owned = new Set(deck.map(c => c.id));
+  const pool = REWARD_CARDS.filter(c => !owned.has(c.id));
+  let roll = Math.random();
+  if (roll < odds.card && pool.length) {
+    const card = pool[Math.floor(Math.random() * pool.length)];
+    deck = [...deck, card];
+    S.cards.push({ ...card, used: false });
+    floatText(at, '+CARD', 'stun');
+    log(`You take <b>${card.name}</b> ${from}.`);
+    toast(`New card: <b>${card.name}</b> — it's yours for the run.`);
+    renderHand(); renderSide();
+    return;
+  }
+  roll -= odds.card;
+  if (roll < odds.creds) {
+    const n = 5 + Math.floor(Math.random() * 11);
+    run.creds += n;
+    floatText(at, `+¥${n}`, 'stun');
+    log(`You take ¥${n} creds ${from}.`);
+  } else if (roll < odds.creds + odds.stim) {
+    run.stims++;
+    floatText(at, '+STIM', 'heal');
+    log(`You take a <b>healing stim</b> ${from}. Use it from the panel on the right to heal ${STIM_HEAL}.`);
+  } else if (roll < odds.creds + odds.stim + (odds.serum || 0)) {
+    const kind = Math.random() < 0.5 ? 'speed' : 'strength', sv = SERUMS[kind];
+    run[kind]++;
+    floatText(at, '+SERUM', 'heal');
+    log(`You take a <b>${sv.name}</b> ${from}: +${sv.bonus} ${sv.desc} for ${SERUM_TURNS} turns. Use it from the panel on the right.`);
+  } else {
+    floatText(at, 'EMPTY', 'stun');
+    log(emptyMsg);
+  }
+  renderSide();
+}
+
+// Each room has one cache; walking onto it opens it. Room caches never come up empty.
+function openCache(x, y) {
+  S.loot.delete(key(x, y));
+  renderLoot();
+  grantLoot({ x, y }, FLOORS[S.room].loot, `from ${FLOORS[S.room].cache}`, '');
+}
+
+function useStim() {
+  if (!run.stims || S.busy || S.phase !== 'turn') return;
+  run.stims--;
+  heal(STIM_HEAL);
+}
+
+const serumBonus = kind => S.buff[kind] > 0 ? SERUMS[kind].bonus : 0;
+
+// Drinking a serum counts this turn as the first of its SERUM_TURNS; a second dose adds more turns.
+function useSerum(kind) {
+  if (!run[kind] || S.busy || S.phase !== 'turn') return;
+  const sv = SERUMS[kind], wasActive = S.buff[kind] > 0;
+  run[kind]--;
+  S.buff[kind] += SERUM_TURNS;
+  // Already mid-turn with the move still unused: the extra steps apply right away.
+  if (kind === 'speed' && !wasActive && S.phase === 'turn' && !S.act.mvUsed) S.act.move += sv.bonus;
+  floatText(S.player, `+${sv.bonus} ${sv.desc.toUpperCase()}`, 'heal');
+  log(`You inject a <b>${sv.name}</b>: +${sv.bonus} ${sv.desc} for ${S.buff[kind]} turns.`);
+  render();
+}
+
+// Called at the end of each of your turns (playing a card or resting).
+function tickSerums() {
+  for (const kind in S.buff) {
+    if (S.buff[kind] > 0 && --S.buff[kind] === 0) log(`Your <b>${SERUMS[kind].name}</b> wears off.`);
+  }
+}
+
+// Damaging attacks chip at doors; Lockpick opens one outright. Stuns and pickpockets don't affect doors.
+const canHitDoor = s => s.dmg > 0 || !!s.pick;
+
+function hitVat(t, s) {
+  const k = key(t.x, t.y), b = S.breakable, dmg = rollDmg(s.dmg), hp = S.vats.get(k) - dmg;
+  floatText(t, '-' + dmg, 'dmg');
+  if (hp > 0) {
+    S.vats.set(k, hp);
+    log(`You hit the ${b.name} for ${dmg} (${hp} left).`);
+  } else {
+    // Smashed: the tile becomes open floor with the pickup lying on it.
+    S.vats.delete(k); S.props.delete(k); S.walls[t.y][t.x] = false;
+    const el = tileEl(t.x, t.y);
+    el.classList.remove('prop', 'vat');
+    el.innerHTML = '';
+    S.drops.set(k, b.drop);
+    log(`The ${b.name} breaks open. Something ${b.drop === 'stim' ? 'glints' : 'clatters'} on the floor: walk over it to take it.`);
+    renderDrops();
+  }
+  renderVats(); renderOverlays(); renderSide();
+}
+
+// Walking onto a dropped pickup takes it.
+function takeDrop(x, y) {
+  const k = key(x, y), what = S.drops.get(k);
+  S.drops.delete(k);
+  renderDrops();
+  if (what === 'stim') {
+    run.stims++;
+    floatText({ x, y }, '+STIM', 'heal');
+    log('You pick up a <b>healing stim</b>.');
+  } else if (run.gunMods >= GUN_MOD_MAX) {
+    log(`A gun mod, but your guns already carry the maximum of ${GUN_MOD_MAX}.`);
+  } else {
+    run.gunMods++;
+    floatText({ x, y }, '+1 GUN', 'stun');
+    const guns = S.cards.filter(c => gunBonus(c.action)).map(c => c.name);
+    log(`You fit a <b>gun mod</b>: guns deal +${run.gunMods} damage.` + (guns.length ? '' : ' You have no gun card right now, so it does nothing.'));
+    renderHand();
+  }
+  renderSide();
+}
+
+function hitDoor(t, s) {
+  const k = key(t.x, t.y);
+  if (s.pick) {
+    S.doors.delete(k);
+    floatText(t, 'OPEN', 'heal');
+    log('You pick the lock. The door slides open.');
+  } else {
+    const dmg = rollDmg(s.dmg), hp = S.doors.get(k) - dmg;
+    floatText(t, '-' + dmg, 'dmg');
+    if (hp > 0) { S.doors.set(k, hp); log(`You hit the door for ${dmg} (${hp} left).`); }
+    else { S.doors.delete(k); log('You smash the door open.'); }
+  }
+  renderDoors(); renderOverlays();
+}
+
+function takeKey(e) {
+  e.hasKey = false; S.hasKey = true;
+  floatText(e, 'KEYCARD', 'stun');
+  log(`You take the <b>keycard</b> from ${nameOf(e)}. The exit is unlocked.`);
+  toast('Keycard acquired — the exit is unlocked.');
+  renderExit(); renderUnits(); renderSide();
+}
+
+// The turn never ends by itself: you press End turn, so there's always a moment to use a stim or serum.
+function nextAction() {
+  S.hoverDir = null;
+  render();
+}
+
+// Ending the turn spends the picked card even if you didn't use it; you can't end a turn without one.
+async function endTurn() {
+  if (S.busy || S.phase !== 'turn') return;
+  if (!S.playing) { toast('Pick a card first, or rest.'); return; }
+  S.playing.used = true; S.playing = null;
+  tickSerums();
+  await runEnemyPhase();
+}
+
+async function runEnemyPhase() {
+  S.phase = 'enemy'; S.busy = true; S.hoverDir = null; S.sel = null;
+  render();
+  await sleep(250);
+  for (const e of [...S.enemies]) {
+    if (e.hp <= 0) continue;
+    S.fast = !onScreen(e);
+    await enemyTurn(e);
+    S.fast = false;
+    if (S.player.hp <= 0) { S.busy = false; return gameOver('Your vitals hit zero.'); }
+  }
+  S.busy = false;
+  startRound();
+}
+
+// ---------- Enemy AI ----------
+async function enemyTurn(e) {
+  const r = unitEls.get(e.id);
+  r.el.classList.add('acting'); r.intent.classList.add('acting');
+  if (e.stunned) { e.stunned--; await pause(300); }
+  else if (!e.alerted) await patrolTurn(e);
+  else if (e.intent) await attackTurn(e);
+  else await pause(150);
+  e.intent = null;
+  r.el.classList.remove('acting'); r.intent.classList.remove('acting');
+  renderUnits();
+}
+
+// Unaware: walk forward, turning at obstacles (right, then left, then back). Guards just turn in place.
+async function patrolTurn(e) {
+  if (!ENEMY_TYPES[e.kind].patrol) {
+    e.facing = turnRight(e.facing);
+    renderUnits(); renderOverlays();
+    await pause(250);
+    checkSight();
+    return;
+  }
+  for (let i = 0; i < ENEMY_TYPES[e.kind].patrol && !e.alerted; i++) {
+    const s = patrolStep(e, e);
+    if (!s) break;
+    await walk(e, [[s.x, s.y]]);
+    checkSight();
+  }
+  await pause(80);
+}
+
+// One patrol step for enemy e from state s ({x, y, facing}); null if boxed in.
+function patrolStep(e, s) {
+  const P = S.player;
+  const free = ([dx, dy]) => {
+    const x = s.x + dx, y = s.y + dy, o = enemyAt(x, y);
+    return !isWall(x, y) && (!o || o === e) && !(x === P.x && y === P.y);
+  };
+  let d = s.facing;
+  if (!free(d)) {
+    d = [turnRight(d), turnLeft(d), [-d[0], -d[1]]].find(free);
+    if (!d) return null;
+  }
+  return { x: s.x + d[0], y: s.y + d[1], facing: d };
+}
+
+// Where an unaware enemy will be (and face) after each step of its next patrol.
+function predictPatrol(e) {
+  const steps = ENEMY_TYPES[e.kind].patrol;
+  if (e.stunned) return [];
+  if (!steps) return [{ x: e.x, y: e.y, facing: turnRight(e.facing) }];
+  const out = [];
+  for (let i = 0, s = e; i < steps; i++) {
+    s = patrolStep(e, s);
+    if (!s) break;
+    out.push(s);
+  }
+  return out;
+}
+
+async function attackTurn(e) {
+  const it = e.intent, P = S.player;
+  const canHit = (x, y) => it.atk > 0 && (it.range
+    ? manh({ x, y }, P) <= it.range && los({ x, y }, P)
+    : manh({ x, y }, P) === 1);
+
+  if (it.move > 0 && !canHit(e.x, e.y)) {
+    const { dist, prev } = bfs(e.x, e.y, (x, y) => !isWall(x, y) && !enemyAt(x, y) && !(x === P.x && y === P.y));
+    // Head for the nearest tile it could attack from (or next to the player if it has no attack).
+    const want = it.atk > 0 ? canHit : (x, y) => manh({ x, y }, P) === 1;
+    let best = null, score = Infinity;
+    for (const [k, d] of dist) {
+      const [x, y] = unkey(k);
+      if (!want(x, y)) continue;
+      const s = d * 100 + manh({ x, y }, P);
+      if (s < score) { score = s; best = [x, y]; }
+    }
+    // Nowhere to attack from: just get as close as possible.
+    if (!best) for (const [k, d] of dist) {
+      const [x, y] = unkey(k), s = manh({ x, y }, P) * 100 + d;
+      if (s < score) { score = s; best = [x, y]; }
+    }
+    if (best) await walk(e, pathTo(prev, e.x, e.y, best[0], best[1]).slice(0, it.move));
+  }
+
+  if (canHit(e.x, e.y)) {
+    if (it.range) await shot(e, P); else await lunge(e, P);
+    const dmg = rollDmg(it.atk);
+    log(`${nameOf(e)} hits you for ${dmg}.`);
+    damage(P, dmg);
+    await pause(250);
+  } else await pause(150);
+}
+
+// ---------- Effects ----------
+async function walk(u, path) {
+  for (const [x, y] of path) {
+    u.facing = [x - u.x, y - u.y];
+    u.x = x; u.y = y;
+    renderUnits(); renderOverlays();
+    if (u === S.player) {
+      checkSight();
+      if (S.loot.has(key(x, y))) openCache(x, y);
+      if (S.drops.has(key(x, y))) takeDrop(x, y);
+    }
+    await pause(150);
+  }
+}
+
+function damage(u, n) {
+  u.hp -= n;
+  floatText(u, '-' + n, 'dmg');
+  const r = unitEls.get(u.id);
+  r.el.classList.remove('hit'); void r.el.offsetWidth; r.el.classList.add('hit');
+  if (u !== S.player && u.hp <= 0) {
+    log(`${nameOf(u)} is defeated.`);
+    S.enemies = S.enemies.filter(e => e !== u);
+    if (u.hasKey) takeKey(u);
+    unitEls.delete(u.id);
+    r.intent.remove(); r.el.classList.add('dead');
+    setTimeout(() => r.el.remove(), 400);
+  }
+  renderUnits(); renderSide();
+}
+
+function heal(n) {
+  if (!n) return;
+  const P = S.player, before = P.hp;
+  P.hp = Math.min(P.max, P.hp + n);
+  if (P.hp > before) { floatText(P, '+' + (P.hp - before), 'heal'); log(`You heal ${P.hp - before}.`); }
+  renderUnits(); renderSide();
+}
+
+function floatText(u, text, cls) {
+  const f = document.createElement('div');
+  f.className = 'float ' + cls; f.textContent = text;
+  f.style.left = (u.x * T + T / 2) + 'px'; f.style.top = (u.y * T + T / 2) + 'px';
+  $('#fx').appendChild(f);
+  setTimeout(() => f.remove(), 900);
+}
+
+async function shot(from, to) {
+  const s = document.createElement('div');
+  s.className = 'shot';
+  s.style.setProperty('--c', from.id === 'p' ? 'var(--blue)' : ENEMY_TYPES[from.kind].color);
+  s.style.rotate = Math.atan2(to.y - from.y, to.x - from.x) + 'rad';
+  s.style.left = (from.x * T + T / 2) + 'px'; s.style.top = (from.y * T + T / 2) + 'px';
+  $('#fx').appendChild(s);
+  void s.offsetWidth;
+  s.style.left = (to.x * T + T / 2) + 'px'; s.style.top = (to.y * T + T / 2) + 'px';
+  await pause(210);
+  s.remove();
+}
+
+async function lunge(u, t) {
+  const el = unitEls.get(u.id).el;
+  el.style.transform = `translate(${Math.sign(t.x - u.x) * 14}px, ${Math.sign(t.y - u.y) * 14}px)`;
+  await pause(110);
+  el.style.transform = '';
+  await pause(90);
+}
+
+function log(msg) { S.log.push(msg); }
+
+let toastTimer;
+function toast(html) {
+  const t = $('#toast');
+  t.innerHTML = html; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2600);
+}
+
+function showModal(title, msg, buttons, extra = '') {
+  const m = $('#modal');
+  m.innerHTML = `<div class="box"><h2>${title}</h2><p>${msg}</p>${extra}${buttons.map(([act, label]) => `<button class="primary" data-act="${act}">${label}</button>`).join(' ')}</div>`;
+  m.hidden = false;
+}
+
+function roomCleared() {
+  S.phase = 'over'; render();
+  if (S.room === MAPS.length - 1) return showModal('Run complete', 'Every floor is clear.', [['newrun', 'Play again']]);
+  const owned = new Set(deck.map(c => c.id));
+  const pool = REWARD_CARDS.filter(c => !owned.has(c.id));
+  const reward = pool[Math.floor(Math.random() * pool.length)];
+  if (reward) deck = [...deck, reward];
+  showModal('Floor clear',
+    `On to floor ${S.room + 2}. Your HP and cards are restored.${reward ? '<br>New card added to your deck:' : ''}`,
+    [['nextroom', 'Next floor']],
+    reward ? `<div class="reward"><div class="card">${cardHTML(reward)}</div></div>` : '');
+}
+
+function gameOver(msg) {
+  S.phase = 'over'; render();
+  showModal('Flatlined', msg, [['restart', 'Retry floor'], ['newrun', 'Start over']]);
+}
+
+// ---------- Rendering ----------
+const tileEl = (x, y) => $('#board').children[y * S.w + x];
+const isFloorTile = (x, y) => x >= 0 && y >= 0 && x < S.w && y < S.h && (!S.walls[y][x] || S.props.has(key(x, y)));
+
+function buildBoard() {
+  const b = $('#board');
+  b.innerHTML = '';
+  b.className = 'theme-' + FLOORS[S.room].theme;
+  unitEls.clear();
+  b.style.gridTemplateColumns = `repeat(${S.w}, ${T}px)`;
+  for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
+    const t = document.createElement('div');
+    let c = (x + y) % 2 ? 'floor alt' : 'floor';
+    if (S.props.has(key(x, y))) c = 'floor prop';
+    else if (S.walls[y][x]) {
+      // Solid rock with no floor next to it is drawn as empty void, so the building's shape reads clearly.
+      let edge = false;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (isFloorTile(x + dx, y + dy)) edge = true;
+      c = edge ? 'wall' : 'void';
+    }
+    t.className = 'tile ' + c;
+    if (x === S.exit.x && y === S.exit.y) t.classList.add('exit');
+    t.dataset.x = x; t.dataset.y = y;
+    b.appendChild(t);
+  }
+  b.style.width = S.w * T + 'px';
+  renderExit(); renderDoors(); renderLoot(); renderVats(); renderDrops();
+  const fx = document.createElement('div');
+  fx.id = 'fx';
+  b.appendChild(fx);
+}
+
+function renderExit() {
+  const t = $('#board .tile.exit'), locked = S.needKey && !S.hasKey;
+  t.classList.toggle('locked', locked);
+  t.innerHTML = `<span>${locked ? 'LOCKED' : 'EXIT'}</span>`;
+}
+
+function renderDoors() {
+  for (const t of $('#board').querySelectorAll('.tile.door')) { t.classList.remove('door'); t.innerHTML = ''; }
+  for (const [k, hp] of S.doors) {
+    const t = tileEl(...unkey(k));
+    t.classList.add('door');
+    t.innerHTML = `<span>${hp}</span>`;
+  }
+}
+
+// Vats show their HP once they've been hit, so you can see how close one is to breaking.
+function renderVats() {
+  for (const [k, hp] of S.vats) {
+    const t = tileEl(...unkey(k));
+    t.classList.add('vat');
+    t.innerHTML = hp < S.breakable.hp ? `<span>${hp}</span>` : '';
+  }
+}
+
+function renderDrops() {
+  for (const t of $('#board').querySelectorAll('.tile.drop')) { t.classList.remove('drop', 'drop-stim', 'drop-gunmod'); t.innerHTML = ''; }
+  for (const [k, what] of S.drops) {
+    const t = tileEl(...unkey(k));
+    t.classList.add('drop', 'drop-' + what);
+    t.innerHTML = '<span></span>';
+  }
+}
+
+function renderLoot() {
+  for (const t of $('#board').querySelectorAll('.tile.loot')) { t.classList.remove('loot'); t.innerHTML = ''; }
+  for (const k of S.loot) {
+    const t = tileEl(...unkey(k));
+    t.classList.add('loot');
+    t.innerHTML = '<span></span>';
+  }
+}
+
+// The board is bigger than the screen: keep the player centered (clamped to the floor's edges).
+function updateCamera() {
+  const vp = $('#viewport'), W = vp.clientWidth, H = vp.clientHeight, bw = S.w * T, bh = S.h * T, P = S.player;
+  const axis = (view, size, pos) => size <= view ? (view - size) / 2 : Math.min(0, Math.max(view - size, view / 2 - (pos + .5) * T));
+  S.cam = { x: axis(W, bw, P.x), y: axis(H, bh, P.y) };
+  $('#board').style.transform = `translate(${S.cam.x}px, ${S.cam.y}px)`;
+}
+
+function onScreen(u) {
+  const vp = $('#viewport'), sx = u.x * T + S.cam.x, sy = u.y * T + S.cam.y;
+  return sx > -T && sy > -T && sx < vp.clientWidth && sy < vp.clientHeight;
+}
+
+// Whole-floor overview in the side panel: you, enemies, doors, caches and the exit.
+function drawMinimap() {
+  const cv = $('#minimap');
+  if (!cv) return;
+  const s = Math.max(2, Math.floor(198 / S.w));
+  cv.width = S.w * s; cv.height = S.h * s;
+  const c = cv.getContext('2d');
+  for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
+    const k = key(x, y);
+    c.fillStyle = S.doors.has(k) ? '#22e4ff' : S.props.has(k) ? '#2a3150' : S.walls[y][x] ? '#0b0d16' : '#1b2033';
+    c.fillRect(x * s, y * s, s, s);
+  }
+  const dot = (x, y, col) => { c.fillStyle = col; c.fillRect(x * s - 1, y * s - 1, s + 2, s + 2); };
+  for (const k of S.loot) dot(...unkey(k), '#f8e14a');
+  for (const [k, what] of S.drops) dot(...unkey(k), what === 'stim' ? '#4dff9a' : '#ff8a1c');
+  dot(S.exit.x, S.exit.y, S.needKey && !S.hasKey ? '#ff3b6b' : '#4dff9a');
+  for (const e of S.enemies) dot(e.x, e.y, e.alerted ? '#ff2e97' : ENEMY_TYPES[e.kind].color);
+  dot(S.player.x, S.player.y, '#ffffff');
+}
+
+function render() { renderUnits(); renderOverlays(); renderSide(); renderBar(); renderHand(); }
+
+function intentHTML(e) {
+  if (e.stunned) return '<span class="stun">Stunned</span>';
+  if (!e.alerted) return `<span class="idle">${ENEMY_TYPES[e.kind].patrol ? 'Patrolling' : 'On guard'}</span>`;
+  const it = e.intent;
+  if (!it) return e.fresh ? '<span class="a">!</span>' : '';
+  let h = '';
+  if (it.move) h += `<span class="m">Move ${it.move}</span>`;
+  if (it.atk) h += `<span class="a">${it.range ? `Shoot ${it.atk} <small>R${it.range}</small>` : `Attack ${it.atk}`}</span>`;
+  return h;
+}
+
+function renderUnits() {
+  const fx = $('#fx');
+  for (const u of [S.player, ...S.enemies]) {
+    let r = unitEls.get(u.id);
+    if (!r) {
+      const isP = u.id === 'p', t = isP ? null : ENEMY_TYPES[u.kind];
+      const el = document.createElement('div');
+      el.className = 'unit ' + (isP ? 'player' : 'enemy');
+      el.style.setProperty('--c', isP ? 'var(--blue)' : t.color);
+      el.innerHTML = `<div class="token"><b>${isP ? '@' : t.glyph}</b></div>${isP ? '' : '<div class="eye"></div>'}<div class="hp"><i></i></div><div class="hpnum"></div>`;
+      const intent = document.createElement('div');
+      intent.className = 'intent';
+      fx.append(el, intent);
+      r = { el, intent };
+      unitEls.set(u.id, r);
+    }
+    r.el.style.left = u.x * T + 'px'; r.el.style.top = u.y * T + 'px';
+    r.intent.style.left = (u.x * T + T / 2) + 'px'; r.intent.style.top = u.y * T + 'px';
+    r.el.querySelector('.hp i').style.width = (100 * Math.max(0, u.hp) / u.max) + '%';
+    r.el.querySelector('.hpnum').textContent = Math.max(0, u.hp);
+    if (u.id === 'p') continue;
+    r.intent.innerHTML = intentHTML(u);
+    r.el.classList.toggle('aware', u.alerted);
+    r.el.classList.toggle('haskey', !!u.hasKey);
+    r.el.style.setProperty('--rot', Math.atan2(u.facing[0], -u.facing[1]) + 'rad');
+  }
+  updateCamera();
+  drawMinimap();
+}
+
+function renderOverlays() {
+  const cls = new Map(), P = S.player;
+  const mark = (tiles, c) => tiles.forEach(t => cls.set(key(t.x, t.y), c));
+  const markAtk = (spec, dir) => {
+    const tiles = atkTiles(spec, P, dir);
+    if (dir) return mark(tiles, 'preview');
+    mark(tiles.filter(t => !cls.has(key(t.x, t.y))), 'range');  // faint range never hides a blue move tile
+    mark(tiles.filter(t => (!spec.pick && enemyAt(t.x, t.y)) || (canHitDoor(spec) && doorAt(t.x, t.y))
+      || (spec.dmg > 0 && vatAt(t.x, t.y))), 'target');
+  };
+  // Blue: where you can still move. Red on top: what the picked (or hovered) card can hit.
+  if (S.phase === 'turn' && !S.busy) {
+    const a = S.act;
+    if (!a.mvUsed) mark(reachTiles(a.move), 'reach');
+    if (a.atk && !a.atkUsed) markAtk(a.atk, isDirectional(a.atk) ? S.hoverDir : null);
+    else if (S.preview && !a.atkUsed) markAtk(S.preview, null);
+  }
+  // Yellow: what unaware enemies see now. Violet: what they'll see during their next patrol.
+  const seen = new Set(), next = new Set();
+  for (const e of S.enemies) {
+    if (e.alerted) continue;
+    visionTiles(e).forEach(t => seen.add(key(t.x, t.y)));
+    for (const s of predictPatrol(e)) visionTiles({ ...e, ...s }).forEach(t => next.add(key(t.x, t.y)));
+  }
+  for (const t of $('#board').querySelectorAll('.tile')) {
+    t.classList.remove('reach', 'range', 'target', 'preview');
+    const k = key(+t.dataset.x, +t.dataset.y), c = cls.get(k);
+    if (c) t.classList.add(c);
+    t.classList.toggle('seen', seen.has(k));
+    t.classList.toggle('next', !seen.has(k) && next.has(k));
+  }
+}
+
+function renderSide() {
+  const P = S.player, hp = Math.max(0, P.hp);
+  const canUseItem = S.phase === 'turn' && !S.busy;
+  $('#side').innerHTML = `
+    <div class="panel">
+      <div class="row"><b>Floor ${S.room + 1} / ${MAPS.length}</b><span>Round ${S.round}</span></div>
+      <div class="floorname">${FLOORS[S.room].name}</div>
+      <div class="row"><span>${run.char.name}</span><span>STR ${run.char.strength} · MOVE ${run.char.move}</span></div>
+      <div class="hpbig"><i style="width:${100 * hp / P.max}%"></i><span>HP ${hp} / ${P.max}</span></div>
+      <canvas id="minimap"></canvas>
+    </div>
+    <div class="panel">
+      <div class="row"><span>Cards ready</span><b>${S.cards.filter(c => !c.used).length} / ${S.cards.length}</b></div>
+      <div class="row"><span>Burned</span><b>${S.burned}</b></div>
+      <div class="row"><span>Creds</span><b>¥${run.creds}</b></div>
+      ${run.gunMods ? `<div class="row"><span>Gun mods</span><b>+${run.gunMods} gun damage</b></div>` : ''}
+      <div class="row"><span>Healing stims</span><b>${run.stims} <button class="mini-btn" data-act="stim" ${run.stims && canUseItem ? '' : 'disabled'}>Heal +${STIM_HEAL}</button></b></div>
+      ${Object.entries(SERUMS).map(([kind, sv]) => `
+        <div class="row"><span>${sv.name}s</span><b>${run[kind]} <button class="mini-btn" data-act="serum-${kind}" ${run[kind] && canUseItem ? '' : 'disabled'}>+${sv.bonus} ${sv.desc}</button></b></div>
+        ${S.buff[kind] ? `<div class="buff">${sv.name}: +${sv.bonus} ${sv.desc}, ${S.buff[kind]} turn${S.buff[kind] > 1 ? 's' : ''} left</div>` : ''}`).join('')}
+      ${S.needKey ? `<div class="row"><span>Keycard</span><b class="${S.hasKey ? 'ok' : 'lost'}">${S.hasKey ? 'Got it' : 'Needed'}</b></div>` : ''}
+      <div class="note">Each turn: play one card and move up to ${run.char.move}. Used cards go dark. Resting takes a turn: you burn one card for good and the rest come back.</div>
+      <div class="note"><span class="key seen"></span>Seen now <span class="key next"></span>Seen on their next move</div>
+    </div>
+    <div class="panel log">${S.log.slice(-10).map(l => `<div>${l}</div>`).join('')}</div>`;
+  drawMinimap();
+}
+
+function renderBar() {
+  const bar = $('#bar');
+  if (S.phase === 'turn') {
+    const a = S.act, c = S.playing, anyReady = S.cards.some(x => !x.used);
+    const canRest = !a.mvUsed && !a.atkUsed && S.cards.some(x => x.used);
+    let hint;
+    if (!c) hint = anyReady
+      ? `Click a card to use it, and click a blue tile to move (up to ${a.move}).`
+      : '<b>All your cards are used.</b> Rest to get them back.';
+    else if (!a.atkUsed) hint = (isDirectional(a.atk) ? 'Point toward a target and click a red tile' : 'Click a red target')
+      + ` to use <b>${c.name}</b>. Click the card again to put it back.`;
+    else hint = a.mvUsed ? 'Done for this turn. Use a stim or serum if you like, then end your turn.' : 'Click a blue tile to move, or end your turn.';
+    const bonus = a.atk && a.atk.dmg > 0 && serumBonus('strength') ? ` (+${serumBonus('strength')})` : '';
+    bar.innerHTML = `
+      <div class="hint">${hint}</div>
+      <div class="chips">
+        <span class="chip mv ${a.mvUsed ? 'used' : ''}">${a.mvUsed ? '✓ ' : ''}Move ${a.move}</span>
+        <span class="chip ${c ? 'atk' : 'empty'} ${a.atkUsed ? 'used' : ''}">${c ? (a.atkUsed ? '✓ ' : '') + atkLabel(c.action) + bonus : 'No card yet'}</span>
+      </div>
+      <button data-act="rest" ${canRest ? '' : 'disabled'}>Rest</button>
+      <button class="primary" data-act="end" ${c ? '' : 'disabled'}>End turn</button>`;
+  } else if (S.phase === 'burn') {
+    const c = S.sel;
+    bar.innerHTML = `
+      <div class="hint">${S.forcedRest ? '<b>Out of cards.</b> You have to rest this turn. ' : ''}<b>Resting</b> takes your whole turn. Pick a card to <b>burn</b> for good. All your other cards come back.</div>
+      <div class="chips"><span class="chip ${c ? 'atk' : 'empty'}">${c ? 'Burn ' + c.name : 'No card picked'}</span></div>
+      ${S.forcedRest ? '' : '<button data-act="cancelrest">Cancel</button>'}
+      <button class="primary" data-act="burn" ${c ? '' : 'disabled'}>Burn &amp; rest</button>`;
+  } else if (S.phase === 'enemy') {
+    bar.innerHTML = `<div class="hint">Enemies are acting…</div>`;
+  } else bar.innerHTML = '';
+}
+
+function diagram(s) {
+  let tiles;
+  if (s.type === 'melee') tiles = DIRS;
+  else if (s.shape === 'ring') tiles = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
+  else tiles = SHAPES[s.shape];
+  const set = new Set(tiles.map(([x, y]) => key(x, y)));
+  let h = '<div class="diag">';
+  for (let y = -3; y <= 1; y++) for (let x = -2; x <= 2; x++) {
+    const c = !x && !y ? 'me' : set.has(key(x, y)) ? (s.type === 'melee' ? 'opt' : 'hit') : '';
+    h += `<i class="${c}"></i>`;
+  }
+  return h + '</div>';
+}
+
+function actionHTML(s) {
+  if (s.type === 'self') {
+    return (s.heal ? `<div class="big heal">Heal ${s.heal}</div>` : '') +
+      (s.move ? `<div class="big dash">Move +${s.move}</div>` : '') + '<div class="sub">Self</div>';
+  }
+  const sub = s.pick ? 'Opens an adjacent door<br>silently'
+    : s.steal ? 'Melee · unaware target<br>Creds, stims, cards…' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Ranged · clear shot' : SHAPE_NAMES[s.shape];
+  return `<div class="big">${atkName(s)}</div><div class="sub">${sub}</div>` +
+    (s.type === 'ranged' ? `<div class="rangeicon">⌖ ${s.range}</div>` : s.type === 'melee' ? '' : diagram(s));
+}
+
+const cardHTML = c => `<div class="half">${actionHTML(c.action)}</div><div class="name">${c.name}</div>`;
+
+// All your cards for this floor, in a fixed order: used ones are dark, burned ones are gone.
+function renderHand() {
+  const h = $('#hand');
+  h.innerHTML = '';
+  h.classList.toggle('locked', S.phase !== 'turn' && S.phase !== 'burn');
+  h.classList.toggle('burning', S.phase === 'burn');
+  const spent = S.phase === 'turn' && S.act.atkUsed;
+  for (const c of [...S.cards].sort((a, b) => a.id - b.id)) {
+    const el = document.createElement('div');
+    const picked = S.phase === 'burn' ? S.sel === c : c === S.playing && !spent;
+    el.className = 'card' + (c.used || (c === S.playing && spent) ? ' used' : '') + (picked ? ' sel' : '');
+    el.innerHTML = cardHTML(c);
+    el.onclick = () => pickCard(c);
+    el.onmouseenter = () => { if (S.phase === 'turn' && !S.playing && !c.used && !spent) { S.preview = c.action; renderOverlays(); } };
+    el.onmouseleave = () => { S.preview = null; renderOverlays(); };
+    h.appendChild(el);
+  }
+}
+
+// ---------- Input ----------
+const board = $('#board');
+board.addEventListener('click', e => {
+  const t = e.target.closest('.tile');
+  if (t) onTileClick(+t.dataset.x, +t.dataset.y);
+});
+board.addEventListener('mousemove', e => {
+  const t = e.target.closest('.tile');
+  if (!t || S.phase !== 'turn' || !S.act.atk || S.act.atkUsed || !isDirectional(S.act.atk)) return;
+  const d = dirTo(+t.dataset.x, +t.dataset.y);
+  if (String(d) === String(S.hoverDir)) return;
+  S.hoverDir = d; renderOverlays();
+});
+board.addEventListener('mouseleave', () => {
+  if (S.hoverDir) { S.hoverDir = null; renderOverlays(); }
+});
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]');
+  if (!b || b.disabled) return;
+  const act = b.dataset.act;
+  if (act === 'rest') startRest();
+  else if (act === 'burn') confirmRest();
+  else if (act === 'cancelrest') { if (S.phase === 'burn') { S.phase = 'turn'; S.sel = null; render(); } }
+  else if (act === 'end') endTurn();
+  else if (act === 'stim') useStim();
+  else if (act.startsWith('serum-')) useSerum(act.slice(6));
+  else if (S.busy) return;
+  else if (act === 'restart') { $('#modal').hidden = true; loadRoom(S.room); }
+  else if (act === 'nextroom') { $('#modal').hidden = true; loadRoom(S.room + 1); }
+  else if (act === 'newrun') { $('#modal').hidden = true; chooseCharacter(); }
+});
+
+chooseCharacter();
+</script>
+</body>
+</html>

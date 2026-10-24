@@ -366,7 +366,7 @@ const GUN_MOD_MAX = 3;
 const gunBonus = s => s.type === 'ranged' && s.dmg > 0 ? run.gunMods : 0;
 
 // Floors (0-based) whose exit is locked until you take the keycard from the enemy carrying it.
-const KEYCARD_FLOORS = new Set([1]);
+const KEYCARD_FLOORS = new Set([1, 2]);
 
 // Hitting an enemy that hasn't spotted you multiplies the damage.
 const BACKSTAB_MULT = 2;

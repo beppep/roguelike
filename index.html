@@ -165,6 +165,15 @@ button:disabled { opacity: .4; cursor: default; }
 .card.used { filter: brightness(.35) grayscale(.8); cursor: default; }
 .card.used:hover { transform: none; box-shadow: 0 6px 18px rgba(0,0,0,.6); }
 #hand.burning .card { filter: none; cursor: pointer; }
+/* The card shape is clipped, so the glow is drawn inside it. */
+#hand.choose .card:not(.used) .half { box-shadow: inset 0 0 0 2px var(--blue), inset 0 0 22px rgba(34,228,255,.45); animation: pick-pulse 1.4s ease-in-out infinite; }
+#hand.choose .card:not(.used) .name { background: #0b2a3a; }
+#hand.done .card { opacity: .35; filter: saturate(.4); cursor: default; }
+#hand.done .card:hover { transform: none; }
+@keyframes pick-pulse { 50% { box-shadow: inset 0 0 0 2px #8ef1ff, inset 0 0 34px rgba(34,228,255,.75); } }
+button.ready { animation: end-pulse 1.2s ease-in-out infinite; }
+@keyframes end-pulse { 50% { box-shadow: 0 0 26px rgba(248,225,74,.9); filter: brightness(1.15); } }
+@media (prefers-reduced-motion: reduce) { #hand.choose .card .half, button.ready { animation: none; } }
 #hand.burning .card.sel .half { border-color: #ff3b3b; background: linear-gradient(160deg, #3a0f0f, #1e0808); box-shadow: inset 0 0 14px rgba(255,59,59,.5); }
 .name { text-align: center; font: 700 11px var(--mono); text-transform: uppercase; letter-spacing: 1.5px; background: #05060c; color: var(--blue); padding: 3px; border-top: 1px solid #2c3354; }
 .big { font: 800 16px var(--mono); color: #ff5ca8; text-shadow: 0 0 6px rgba(255,46,151,.5); }
@@ -1474,7 +1483,7 @@ function renderBar() {
         <span class="chip ${c ? 'atk' : 'empty'} ${a.atkUsed ? 'used' : ''}">${c ? (a.atkUsed ? '✓ ' : '') + atkLabel(c.action) + bonus : 'No card yet'}</span>
       </div>
       <button data-act="rest" ${canRest ? '' : 'disabled'}>Rest</button>
-      <button class="primary" data-act="end" ${c ? '' : 'disabled'}>End turn</button>`;
+      <button class="${a.atkUsed && a.mvUsed ? 'primary ready' : ''}" data-act="end" ${c ? '' : 'disabled'}>End turn</button>`;
   } else if (S.phase === 'burn') {
     const c = S.sel;
     bar.innerHTML = `
@@ -1520,6 +1529,9 @@ function renderHand() {
   h.innerHTML = '';
   h.classList.toggle('locked', S.phase !== 'turn' && S.phase !== 'burn');
   h.classList.toggle('burning', S.phase === 'burn');
+  // Turn state at a glance: cards glow while you still have to pick one, and fade once this turn's card is used.
+  h.classList.toggle('choose', S.phase === 'turn' && !S.playing && !S.act.atkUsed);
+  h.classList.toggle('done', S.phase === 'turn' && S.act.atkUsed);
   const spent = S.phase === 'turn' && S.act.atkUsed;
   for (const c of [...S.cards].sort((a, b) => a.id - b.id)) {
     const el = document.createElement('div');

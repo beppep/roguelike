@@ -225,6 +225,28 @@ button.ready { animation: end-pulse 1.3s ease-in-out infinite; }
 .keep-count { font: 600 14px var(--mono); color: var(--gold) !important; margin: 0 0 12px !important; }
 #modal .reward { display: flex; justify-content: center; margin: -6px 0 20px; pointer-events: none; }
 #modal .reward .card { border-color: var(--gold); }
+
+/* Darkness: never seen is black; seen before but out of sight is remembered, dim and colourless. */
+.tile.fog { filter: brightness(.42) saturate(.5); }
+.tile.unseen { background: #050504 !important; box-shadow: none !important; filter: none; }
+.tile.unseen > * { visibility: hidden; }
+.tile.unseen::before { display: none; }
+.tile.unseen:not(.reach)::after { display: none; }
+
+/* Office furniture, searchable from the next tile. Desks: wood-effect top with a monitor; cabinets: steel drawers. */
+.tile.desk::before { content: ''; position: absolute; inset: 6px 4px; border-radius: 1px; background: #5a4a38; box-shadow: inset 0 0 0 1px #3a2f23, 0 2px 0 rgba(0,0,0,.5); }
+.tile.desk::after { content: ''; position: absolute; left: 14px; top: 10px; width: 18px; height: 12px; border-radius: 1px; background: #4f6b62; box-shadow: 0 0 0 2px #1d1b18, 0 0 6px rgba(111,154,139,.45); right: auto; bottom: auto; }
+.tile.desk.searched::after { background: #1f2422; box-shadow: 0 0 0 2px #1d1b18; }
+.tile.cabinet::before { content: ''; position: absolute; inset: 4px 8px; border-radius: 1px; background: repeating-linear-gradient(#6b6e70 0 8px, #4a4c4e 8px 10px); box-shadow: inset 0 0 0 1px #3a3c3e, 0 2px 0 rgba(0,0,0,.5); }
+.tile.cabinet.searched::before { background: repeating-linear-gradient(#6b6e70 0 8px, #4a4c4e 8px 10px), #6b6e70; transform: translateY(3px); }
+.tile.desk, .tile.cabinet { cursor: zoom-in; }
+
+/* What you read when you search. */
+.doc { text-align: left; max-width: 46ch; margin: 0 auto 18px; padding: 14px 16px; border-radius: 1px; font: 13px/1.55 var(--mono); }
+.doc p { margin: 8px 0 0; color: inherit; }
+.doc-head { font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid currentColor; }
+.doc.mail { background: #101512; color: #9fc0b3; border: 1px solid #2c3a34; }
+.doc.paper { background: #d8cfb9; color: #2a251e; font-family: var(--type); }
 </style>
 </head>
 <body>
@@ -371,7 +393,8 @@ function mulberry32(a) {
   };
 }
 
-// Builds a floor as map rows: # wall, . floor, + door, o furniture (blocks movement and sight), $ loot cache,
+// Builds a floor as map rows: # wall, . floor, + door, o floor-themed furniture (blocks movement and sight),
+// K desk with a computer and F filing cabinet (solid; search them from next door), $ loot cache,
 // P player, X exit, g/d/e enemies (ganger, drone, enforcer).
 function generateFloor(f) {
   const rng = mulberry32(f.seed);
@@ -454,13 +477,25 @@ function generateFloor(f) {
   const edges = [...cand.keys()];
   for (let i = edges.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [edges[i], edges[j]] = [edges[j], edges[i]]; }
   const parent = spaces.map((_, i) => i), find = i => parent[i] === i ? i : (parent[i] = find(parent[i]));
+  const degree = spaces.map(() => 0), used = new Set();
+  const connect = k => {
+    const [a, b] = k.split(',').map(Number);
+    const [x, y] = pick(cand.get(k));
+    g[y][x] = rng() < 0.75 ? '+' : '.';
+    degree[a]++; degree[b]++; used.add(k);
+  };
   for (const k of edges) {
     const [a, b] = k.split(',').map(Number), ra = find(a), rb = find(b);
     if (ra === rb && rng() >= f.extraDoors) continue;
     parent[ra] = rb;
-    const [x, y] = pick(cand.get(k));
-    g[y][x] = rng() < 0.75 ? '+' : '.';
+    connect(k);
   }
+  // Dead ends are fine for closets; anything bigger gets a second way out when its walls allow one.
+  spaces.forEach((s, i) => {
+    if (s.corridor || degree[i] !== 1 || s.w * s.h < 16) return;
+    const extra = edges.find(k => !used.has(k) && k.split(',').map(Number).includes(i));
+    if (extra) connect(extra);
+  });
 
   // Start in the main corridor at the west end, with doors and branches in reach right away.
   // The exit goes in the room whose walking distance is closest to EXIT_STEPS.
@@ -488,14 +523,50 @@ function generateFloor(f) {
     }
     return null;
   };
-  for (const r of rooms) {
-    // Furniture: lone blocks with open floor all around, so they give cover but never block a doorway.
-    for (let i = 0; i < Math.floor(r.w * r.h / 10); i++) {
-      const x = ri(r.x + 1, r.x + r.w - 2), y = ri(r.y + 1, r.y + r.h - 2);
-      let open = true;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (g[y + dy][x + dx] !== '.') open = false;
-      if (open) g[y][x] = 'o';
+  // Lone blocks with open floor all around give cover but never block a doorway or cut a room in two.
+  const loneSpot = r => {
+    const x = ri(r.x + 1, r.x + r.w - 2), y = ri(r.y + 1, r.y + r.h - 2);
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (g[y + dy][x + dx] !== '.') return null;
+    return [x, y];
+  };
+  // A cabinet stands against a plain stretch of wall (no door beside it), and only if the room stays connected.
+  const roomConnected = r => {
+    const open = [];
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (!'#oKF'.includes(g[y][x])) open.push(key(x, y));
+    if (!open.length) return true;
+    const seenCells = new Set([open[0]]), stack = [open[0]];
+    while (stack.length) {
+      const [x, y] = unkey(stack.pop());
+      for (const [dx, dy] of DIRS) {
+        const k = key(x + dx, y + dy);
+        if (open.includes(k) && !seenCells.has(k)) { seenCells.add(k); stack.push(k); }
+      }
     }
+    return seenCells.size === open.length;
+  };
+  const wallSpot = r => {
+    const side = ri(0, 3);
+    const x = side === 0 ? r.x : side === 1 ? r.x + r.w - 1 : ri(r.x, r.x + r.w - 1);
+    const y = side === 2 ? r.y : side === 3 ? r.y + r.h - 1 : ri(r.y, r.y + r.h - 1);
+    if (g[y][x] !== '.') return null;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+      const c = g[y + dy][x + dx];
+      if (c === '+' || ((dx || dy) && c === '.' && (y + dy < r.y || y + dy >= r.y + r.h || x + dx < r.x || x + dx >= r.x + r.w))) return null;
+    }
+    return [x, y];
+  };
+  for (const r of rooms) {
+    // Office furniture: desks with computers in the middle, a filing cabinet or two against the walls,
+    // and a little of whatever this floor makes.
+    const area = r.w * r.h;
+    for (let i = 0; i < Math.max(1, Math.floor(area / 14)); i++) { const p = loneSpot(r); if (p) g[p[1]][p[0]] = 'K'; }
+    for (let i = 0; i < (area >= 20 ? 2 : 1); i++) {
+      const p = wallSpot(r);
+      if (!p) continue;
+      g[p[1]][p[0]] = 'F';
+      if (!roomConnected(r)) g[p[1]][p[0]] = '.';
+    }
+    for (let i = 0; i < Math.floor(area / 18); i++) { const p = loneSpot(r); if (p) g[p[1]][p[0]] = 'o'; }
     const n = (rng() < f.enemyChance ? 1 : 0) + (r === exitRoom ? 1 : 0);
     for (let i = 0; i < n; i++) { const p = freeTile(r); if (p) g[p[1]][p[0]] = pick([...f.mix]); }
     const p = freeTile(r);
@@ -511,7 +582,6 @@ function generateFloor(f) {
 }
 
 const DIRS = [[0, -1], [1, 0], [0, 1], [-1, 0]];
-const MAPS = FLOORS.map(generateFloor);
 
 // ---------- Helpers ----------
 const $ = s => document.querySelector(s);
@@ -520,6 +590,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const pause = ms => sleep(S.fast ? 0 : ms);
 const key = (x, y) => x + ',' + y;
 const unkey = k => k.split(',').map(Number);
+const MAPS = FLOORS.map(generateFloor);
 const manh = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const doorAt = (x, y) => S.doors.has(key(x, y));
 const vatAt = (x, y) => S.vats.has(key(x, y));
@@ -662,6 +733,72 @@ let deck = [];  // the run's deck; set by the character you pick, grows as you f
 let run = null;  // the character you play plus loot that carries across floors
 const unitEls = new Map();
 
+// ---------- Office furniture you can search ----------
+// Desks have a computer with an email on it; filing cabinets hold a document, sometimes nothing.
+// Mostly it's ordinary office life; now and then something worse shows through. Loot is rare.
+const EMAILS = [
+  { from: 'Facilities', subject: 'Fridge on this floor', body: 'Whoever left the unlabelled container on the bottom shelf: it has started to move. Please collect it by Friday or it will be disposed of per Biohazard Protocol 4.' },
+  { from: 'HR — Wellness Team', subject: 'Mandatory Gratitude Week', body: 'This week, every employee will log three moments of gratitude in the portal. Gratitude is tracked. Your neural lace will remind you hourly.' },
+  { from: 'D. Marsh', subject: 'RE: RE: RE: printer', body: 'It is printing the same page again. Nobody sent it. It is just the word "below" over and over. I have unplugged it twice.' },
+  { from: 'IT Service Desk', subject: 'Ticket #44812 closed', body: 'Your report of "voices in the server room" has been closed as Working As Intended. Please do not open the server room.' },
+  { from: 'Payroll', subject: 'Your deductions', body: 'This month: tax, pension, implant lease (installment 31 of 240), and the usual tithe. Questions about the tithe are not answered by Payroll.' },
+  { from: 'K. Oyelaran', subject: 'lunch?', body: 'Same place as usual? Not the cafeteria. They changed the menu again and nobody will say what the protein is.' },
+  { from: 'Office of the Board', subject: 'Quarterly gathering', body: 'Senior staff will gather on the thirteenth floor at midnight. Wear the grey robes. Bring nothing that remembers your name.' },
+  { from: 'R&D Pharmacology', subject: 'Batch 7 results', body: 'Compound shows 94% compliance in test subjects. Side effects: mild euphoria, loss of appetite, subjects report a man standing behind them. Proceeding to trials.' },
+  { from: 'Security', subject: 'Badge access reminder', body: 'Sublevel B access is suspended until further notice. If your badge opens it anyway, report to Security immediately and do not go in.' },
+  { from: 'M. Varga', subject: 'Leaving do', body: 'Cake in the break room at 4 for Petra, who is "moving to the countryside". She did not say goodbye to anyone. Her desk is still warm.' },
+  { from: 'Procurement', subject: 'PO 2291 approved', body: 'Approved: 400 units printer paper, 12 cases saline, 3 adult goats (live), 1 replacement desk lamp.' },
+  { from: 'Implant Support', subject: 'Firmware 9.4 rolled out', body: 'Your cortical implant has been updated. You may experience lost time, a metallic taste, or a strong urge to walk downstairs. These are normal.' },
+  { from: 'J. Abara', subject: 'something is wrong with floor 3', body: 'I swear the corridor was longer this morning. I counted the doors. There was an extra one. Do not tell my manager I sent this.' },
+  { from: 'Marketing', subject: 'New slogan — feedback by EOD', body: '"We Make You Better." Legal flagged the previous one ("Give Us Everything") as too literal.' },
+];
+const DOCUMENTS = [
+  { title: 'Expense report', body: 'Taxi, 34.00. Client dinner, 212.50. Candles (black, unscented, 40), 88.00. Approved by: [signature smudged].' },
+  { title: 'Floor safety notice', body: 'In case of fire, use the stairs. In case of the other thing, stay at your desk and keep your eyes on your screen until it passes.' },
+  { title: 'Meeting minutes', body: 'Attendees: 7. Agenda: Q3 targets, the sacrifice schedule, parking. Action items: parking to be discussed next quarter.' },
+  { title: 'Performance review', body: 'Meets expectations. Punctual. Asks too many questions about the basement. Recommend reassignment to Below.' },
+  { title: 'Clinical trial consent form', body: 'I agree to the procedure. I understand that what is removed will not be returned. I understand that I may hear it afterwards.' },
+  { title: 'Implant spec sheet', body: 'Model SERAPH-3 ocular graft. Night vision, threat overlay, 0.4% chance per year of seeing things that are there.' },
+  { title: 'Inventory list', body: 'Staplers 14. Desk fans 6. Specimen jars (full) 22. Specimen jars (full, labelled DO NOT FEED) 3.' },
+  { title: 'Handwritten note', body: 'If you are reading this, the lift does not go where the buttons say. Take the stairs. Count them. If you count more than 200, go back up.' },
+  { title: 'Org chart', body: 'Everyone reports up to the Board. The Board reports to a box drawn in red at the top of the page with no name in it.' },
+  { title: 'Sticky note', body: 'Password: ••••••••. Do NOT write the password on a sticky note — Security' },
+];
+const EMPTY_FINDS = ['Dust, paperclips and a dried-out pen.', 'Empty folders. Someone has removed every page.', 'A stale sandwich and a stress ball shaped like a heart. A real one.'];
+const FURNITURE_LOOT_CHANCE = 0.12;
+
+let docQueue = [];
+const nextDoc = (pool, kind) => {
+  if (!docQueue[kind] || !docQueue[kind].length) docQueue[kind] = [...pool].sort(() => Math.random() - 0.5);
+  return docQueue[kind].pop();
+};
+
+function makeFurniture(kind) {
+  const loot = Math.random() < FURNITURE_LOOT_CHANCE ? (Math.random() < 0.7 ? randomPotion() : 'creds') : null;
+  if (kind === 'desk') return { kind, searched: false, loot, email: nextDoc(EMAILS, 'email') };
+  return { kind, searched: false, loot, doc: Math.random() < 0.2 ? null : nextDoc(DOCUMENTS, 'doc') };
+}
+
+// Searching takes no card and no move, but you have to be standing right next to it.
+function searchFurniture(x, y) {
+  const f = S.furn.get(key(x, y)), P = S.player;
+  if (Math.abs(P.x - x) + Math.abs(P.y - y) !== 1) { toast(`Get next to the ${f.kind === 'desk' ? 'computer' : 'cabinet'} to search it.`); return; }
+  let html;
+  if (f.kind === 'desk') {
+    const e = f.email;
+    html = `<div class="doc mail"><div class="doc-head">From: ${e.from}<br>Subject: ${e.subject}</div><p>${e.body}</p></div>`;
+  } else {
+    html = f.doc ? `<div class="doc paper"><div class="doc-head">${f.doc.title}</div><p>${f.doc.body}</p></div>`
+      : `<div class="doc paper"><p>${EMPTY_FINDS[(x + y) % EMPTY_FINDS.length]}</p></div>`;
+  }
+  const first = !f.searched;
+  f.searched = true;
+  tileEl(x, y).classList.add('searched');
+  showModal(f.kind === 'desk' ? 'Workstation' : 'Filing cabinet', '', [['closeread', 'Close']], html);
+  if (first && f.loot) giveLoot(f.loot, { x, y }, f.kind === 'desk' ? 'from the desk drawer' : 'from the back of the drawer', '');
+  else if (first) log(f.kind === 'desk' ? 'You read the screen.' : 'You leaf through the cabinet.');
+}
+
 // Start of a run: fresh deck and loot, then floor 1.
 function newRun() {
   run = { char: OPERATIVE, creds: 0, stims: 0, speed: 0, strength: 0, gunMods: 0 };
@@ -678,7 +815,7 @@ function loadRoom(idx) {
     cards: deck.map(c => ({ ...c, used: false })), burned: 0, playing: null,
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
-    doors: new Map(), props: new Set(), vats: new Map(), drops: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
+    doors: new Map(), props: new Set(), vats: new Map(), drops: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
   };
   let n = 0;
   rows.forEach((row, y) => {
@@ -686,13 +823,14 @@ function loadRoom(idx) {
       if (c === 'P') S.player = { id: 'p', x, y, hp: MAX_HP, max: MAX_HP };
       else if (c === 'X') S.exit = { x, y };
       else if (c === '+') S.doors.set(key(x, y), DOOR_HP);
+      else if (c === 'K' || c === 'F') S.furn.set(key(x, y), makeFurniture(c === 'K' ? 'desk' : 'cabinet'));
       else if (c === 'o') {
         S.props.add(key(x, y));
         if (S.breakable) S.vats.set(key(x, y), S.breakable.hp);
       }
       else if (c === '$') S.loot.set(key(x, y), rollLoot(FLOORS[idx].loot) || 'creds');
       else if (ENEMY_TYPES[c]) S.enemies.push({ id: 'e' + n++, kind: c, x, y, hp: ENEMY_TYPES[c].hp, max: ENEMY_TYPES[c].hp, intent: null, alerted: false, facing: [0, 1] });
-      return c === '#' || c === 'o';
+      return c === '#' || c === 'o' || c === 'K' || c === 'F';
     }));
   });
   S.enemies.forEach(initFacing);
@@ -823,6 +961,7 @@ function attackHit(s, x, y) {
 async function onTileClick(x, y) {
   if (S.busy || S.phase !== 'turn') return;
   const a = S.act, P = S.player;
+  if (S.furn.has(key(x, y))) return searchFurniture(x, y);
   if (a.atk && !a.atkUsed) {
     const hit = attackHit(a.atk, x, y);
     if (hit) return useAttack(hit);
@@ -1285,7 +1424,7 @@ function gameOver(msg) {
 
 // ---------- Rendering ----------
 const tileEl = (x, y) => $('#board').children[y * S.w + x];
-const isFloorTile = (x, y) => x >= 0 && y >= 0 && x < S.w && y < S.h && (!S.walls[y][x] || S.props.has(key(x, y)));
+const isFloorTile = (x, y) => x >= 0 && y >= 0 && x < S.w && y < S.h && (!S.walls[y][x] || S.props.has(key(x, y)) || S.furn.has(key(x, y)));
 
 function buildBoard() {
   const b = $('#board');
@@ -1297,6 +1436,7 @@ function buildBoard() {
     const t = document.createElement('div');
     let c = (x + y) % 2 ? 'floor alt' : 'floor';
     if (S.props.has(key(x, y))) c = 'floor prop';
+    else if (S.furn.has(key(x, y))) c = 'floor ' + S.furn.get(key(x, y)).kind;
     else if (S.walls[y][x]) {
       // Solid rock with no floor next to it is drawn as empty void, so the building's shape reads clearly.
       let edge = false;
@@ -1377,16 +1517,18 @@ function drawMinimap() {
   const s = Math.max(2, Math.floor(198 / S.w));
   cv.width = S.w * s; cv.height = S.h * s;
   const c = cv.getContext('2d');
+  // Only what you've seen is on the map; enemies only while you can see them.
   for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
     const k = key(x, y);
-    c.fillStyle = S.doors.has(k) ? '#8a8172' : S.props.has(k) ? '#3a362f' : S.walls[y][x] ? '#0b0a09' : '#2a2722';
+    c.fillStyle = !S.seen.has(k) ? '#050504' : S.doors.has(k) ? '#8a8172' : S.props.has(k) || S.furn.has(k) ? '#3a362f'
+      : S.walls[y][x] ? '#0b0a09' : S.vis.has(k) ? '#3a3630' : '#24211d';
     c.fillRect(x * s, y * s, s, s);
   }
-  const dot = (x, y, col) => { c.fillStyle = col; c.fillRect(x * s - 1, y * s - 1, s + 2, s + 2); };
+  const dot = (x, y, col) => { if (S.seen.has(key(x, y))) { c.fillStyle = col; c.fillRect(x * s - 1, y * s - 1, s + 2, s + 2); } };
   for (const k of S.loot.keys()) dot(...unkey(k), '#c9a24a');
   for (const [k, what] of S.drops) dot(...unkey(k), { stim: '#7fa36a', speed: '#6f9a8b', strength: '#b5503a' }[what] || '#8a7a4a');
   dot(S.exit.x, S.exit.y, S.needKey && !S.hasKey ? '#b5503a' : '#7fa36a');
-  for (const e of S.enemies) dot(e.x, e.y, e.alerted ? '#e07a60' : ENEMY_TYPES[e.kind].color);
+  for (const e of S.enemies) if (visible(e)) dot(e.x, e.y, e.alerted ? '#e07a60' : ENEMY_TYPES[e.kind].color);
   dot(S.player.x, S.player.y, '#f1ead9');
 }
 
@@ -1403,7 +1545,28 @@ function intentHTML(e) {
   return h;
 }
 
+// What you can see right now: tiles within SIGHT_RADIUS with a clear line from you (walls and closed doors
+// block it; the wall or door itself is visible). Everything you have ever seen stays remembered in S.seen.
+const SIGHT_RADIUS = 9;
+function computeFov() {
+  const P = S.player, R = SIGHT_RADIUS;
+  S.vis = new Set([key(P.x, P.y)]);
+  for (let y = P.y - R; y <= P.y + R; y++) for (let x = P.x - R; x <= P.x + R; x++) {
+    if (x < 0 || y < 0 || x >= S.w || y >= S.h || (x - P.x) ** 2 + (y - P.y) ** 2 > R * R) continue;
+    if (los(P, { x, y })) S.vis.add(key(x, y));
+  }
+  // Walls, doors and furniture bordering any floor you can see are visible too (so long walls don't get cut off).
+  for (const k of [...S.vis]) {
+    const [x, y] = unkey(k);
+    if (isWall(x, y)) continue;
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (isWall(x + dx, y + dy)) S.vis.add(key(x + dx, y + dy));
+  }
+  for (const k of S.vis) S.seen.add(k);
+}
+const visible = u => S.vis.has(key(u.x, u.y));
+
 function renderUnits() {
+  computeFov();
   const fx = $('#fx');
   for (const u of [S.player, ...S.enemies]) {
     let r = unitEls.get(u.id);
@@ -1424,6 +1587,10 @@ function renderUnits() {
     r.el.querySelector('.hp i').style.width = (100 * Math.max(0, u.hp) / u.max) + '%';
     r.el.querySelector('.hpnum').textContent = Math.max(0, u.hp);
     if (u.id === 'p') continue;
+    // Enemies you can't see right now aren't shown.
+    const shown = visible(u);
+    r.el.style.visibility = shown ? '' : 'hidden';
+    r.intent.style.visibility = shown ? '' : 'hidden';
     r.intent.innerHTML = intentHTML(u);
     r.el.classList.toggle('aware', u.alerted);
     r.el.classList.toggle('haskey', !!u.hasKey);
@@ -1450,10 +1617,11 @@ function renderOverlays() {
     if (a.atk && !a.atkUsed) markAtk(a.atk, isDirectional(a.atk) ? S.hoverDir : null);
     else if (S.preview && !a.atkUsed) markAtk(S.preview, null);
   }
-  // Yellow: what unaware enemies see now. Violet: what they'll see during their next patrol.
+  // Yellow: what unaware enemies you can see are watching now. Violet: what they'll see on their next patrol.
+  computeFov();
   const seen = new Set(), next = new Set();
   for (const e of S.enemies) {
-    if (e.alerted) continue;
+    if (e.alerted || !visible(e)) continue;
     visionTiles(e).forEach(t => seen.add(key(t.x, t.y)));
     for (const s of predictPatrol(e)) visionTiles({ ...e, ...s }).forEach(t => next.add(key(t.x, t.y)));
   }
@@ -1463,6 +1631,9 @@ function renderOverlays() {
     if (c) t.classList.add(c);
     t.classList.toggle('seen', seen.has(k));
     t.classList.toggle('next', !seen.has(k) && next.has(k));
+    // Never seen: black. Seen before but out of sight now: remembered, but dark.
+    t.classList.toggle('unseen', !S.seen.has(k));
+    t.classList.toggle('fog', S.seen.has(k) && !S.vis.has(k));
   }
 }
 
@@ -1601,6 +1772,7 @@ document.addEventListener('click', e => {
   else if (act === 'burn') confirmRest();
   else if (act === 'cancelrest') { if (S.phase === 'burn') { S.phase = 'turn'; S.sel = null; render(); } }
   else if (act === 'end') endTurn();
+  else if (act === 'closeread') $('#modal').hidden = true;
   else if (act === 'stim') useStim();
   else if (act.startsWith('serum-')) useSerum(act.slice(6));
   else if (S.busy) return;

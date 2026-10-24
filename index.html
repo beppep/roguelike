@@ -247,6 +247,13 @@ button.ready { animation: end-pulse 1.3s ease-in-out infinite; }
 .doc-head { font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid currentColor; }
 .doc.mail { background: #101512; color: #9fc0b3; border: 1px solid #2c3a34; }
 .doc.paper { background: #d8cfb9; color: #2a251e; font-family: var(--type); }
+
+/* Bodies: a dark stain and a slumped shape in the enemy's colour; greyed out once searched. A searched body keeps no KEY tag. */
+.corpse { position: absolute; width: var(--T); height: var(--T); z-index: 1; pointer-events: none; }
+.corpse::before { content: ''; position: absolute; inset: 9px 6px 7px 8px; border-radius: 45% 55% 40% 60%; background: radial-gradient(ellipse at 50% 55%, rgba(90,18,14,.85), rgba(60,12,10,0) 70%); }
+.corpse::after { content: ''; position: absolute; left: 12px; top: 17px; width: 22px; height: 10px; border-radius: 5px; background: #2a2620; border: 2px solid var(--c); transform: rotate(-24deg); opacity: .9; }
+.corpse.searched::after { border-color: #5a5348; opacity: .6; }
+.corpse.haskey:not(.searched)::before { box-shadow: 0 0 0 2px var(--gold); }
 </style>
 </head>
 <body>
@@ -815,7 +822,7 @@ function loadRoom(idx) {
     cards: deck.map(c => ({ ...c, used: false })), burned: 0, playing: null,
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
-    doors: new Map(), props: new Set(), vats: new Map(), drops: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
+    doors: new Map(), props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
   };
   let n = 0;
   rows.forEach((row, y) => {
@@ -1188,6 +1195,40 @@ function hitDoor(t, s) {
   renderDoors(); renderOverlays();
 }
 
+// A body stays where someone dies. Walk onto it to search it: whatever they carried (the keycard included)
+// and, unless you already pickpocketed them, a roll on the pickpocket odds.
+function dropCorpse(e) {
+  const k = key(e.x, e.y), old = S.corpses.get(k);
+  const loot = e.robbed ? null : rollLoot(LOOT_ODDS);
+  S.corpses.set(k, { kind: e.kind, hasKey: !!e.hasKey || !!(old && old.hasKey), loot: (old && !old.searched && old.loot) || loot, searched: false });
+  e.hasKey = false;
+  renderCorpses();
+}
+
+function searchCorpse(x, y) {
+  const c = S.corpses.get(key(x, y));
+  if (c.searched) return;
+  c.searched = true;
+  const who = 'the ' + ENEMY_TYPES[c.kind].name.toLowerCase() + "'s body";
+  if (c.hasKey) takeKey({ x, y, kind: c.kind });
+  if (c.loot) giveLoot(c.loot, { x, y }, 'from ' + who, '');
+  else if (!c.hasKey) log('You search ' + who + '. Nothing useful.');
+  renderCorpses();
+}
+
+function renderCorpses() {
+  const fx = $('#fx');
+  fx.querySelectorAll('.corpse').forEach(el => el.remove());
+  for (const [k, c] of S.corpses) {
+    const [x, y] = unkey(k);
+    const el = document.createElement('div');
+    el.className = 'corpse' + (c.searched ? ' searched' : '') + (c.hasKey ? ' haskey' : '');
+    el.style.left = x * T + 'px'; el.style.top = y * T + 'px';
+    el.style.setProperty('--c', ENEMY_TYPES[c.kind].color);
+    fx.prepend(el);
+  }
+}
+
 function takeKey(e) {
   e.hasKey = false; S.hasKey = true;
   floatText(e, 'KEYCARD', 'stun');
@@ -1330,6 +1371,7 @@ async function walk(u, path) {
       checkSight();
       if (S.loot.has(key(x, y))) openCache(x, y);
       if (S.drops.has(key(x, y))) takeDrop(x, y);
+      if (S.corpses.has(key(x, y))) searchCorpse(x, y);
     }
     await pause(150);
   }
@@ -1343,7 +1385,7 @@ function damage(u, n) {
   if (u !== S.player && u.hp <= 0) {
     log(`${nameOf(u)} is defeated.`);
     S.enemies = S.enemies.filter(e => e !== u);
-    if (u.hasKey) takeKey(u);
+    dropCorpse(u);
     unitEls.delete(u.id);
     r.intent.remove(); r.el.classList.add('dead');
     setTimeout(() => r.el.remove(), 400);

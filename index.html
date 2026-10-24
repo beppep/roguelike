@@ -254,6 +254,12 @@ button.ready { animation: end-pulse 1.3s ease-in-out infinite; }
 .corpse::after { content: ''; position: absolute; left: 12px; top: 17px; width: 22px; height: 10px; border-radius: 5px; background: #2a2620; border: 2px solid var(--c); transform: rotate(-24deg); opacity: .9; }
 .corpse.searched::after { border-color: #5a5348; opacity: .6; }
 .corpse.haskey:not(.searched)::before { box-shadow: 0 0 0 2px var(--gold); }
+
+/* Keycard door: heavy steel with a card reader; red light until you hold a keycard, then green. */
+#board .tile.keydoor { background: linear-gradient(90deg, #2e2b27 0 4px, #55504a 4px calc(100% - 4px), #2e2b27 calc(100% - 4px)); box-shadow: inset 0 0 0 1px #1d1b18; cursor: pointer; }
+.tile.keydoor::before { content: ''; position: absolute; left: 50%; top: 50%; width: 12px; height: 16px; margin: -8px 0 0 -6px; border-radius: 1px; background: #1d1b18; box-shadow: inset 0 0 0 1px #6b6253; }
+.tile.keydoor::after { content: ''; position: absolute; left: 50%; top: 50%; width: 6px; height: 4px; margin: -5px 0 0 -3px; right: auto; bottom: auto; border-radius: 1px; background: #c0392b; box-shadow: 0 0 6px #c0392b; }
+.tile.keydoor.unlockable::after { background: #7fbf5a; box-shadow: 0 0 6px #7fbf5a; }
 </style>
 </head>
 <body>
@@ -402,7 +408,7 @@ function mulberry32(a) {
 
 // Builds a floor as map rows: # wall, . floor, + door, o floor-themed furniture (blocks movement and sight),
 // K desk with a computer and F filing cabinet (solid; search them from next door), $ loot cache,
-// P player, X exit, g/d/e enemies (ganger, drone, enforcer).
+// L keycard door, P player, X exit (the lift up), g/d/e enemies (ganger, drone, enforcer).
 function generateFloor(f) {
   const rng = mulberry32(f.seed);
   const ri = (a, b) => a + Math.floor(rng() * (b - a + 1)), pick = a => a[Math.floor(rng() * a.length)];
@@ -523,6 +529,23 @@ function generateFloor(f) {
   g[start.cy][start.cx] = 'P';
   g[exitRoom.cy][exitRoom.cx] = 'X';
 
+  // Keycard floors: every way into the lift room becomes a keycard door, plus up to two dead-end side rooms.
+  // Only rooms you can do without are sealed, so a keycard door can never trap you.
+  const openings = r => {
+    const out = [];
+    for (let x = r.x; x < r.x + r.w; x++) out.push([x, r.y - 1], [x, r.y + r.h]);
+    for (let y = r.y; y < r.y + r.h; y++) out.push([r.x - 1, y], [r.x + r.w, y]);
+    return out.filter(([x, y]) => g[y][x] === '+' || g[y][x] === '.');
+  };
+  if (KEYCARD_FLOORS.has(FLOORS.indexOf(f))) {
+    for (const [x, y] of openings(exitRoom)) g[y][x] = 'L';
+    const deadEnds = rooms.filter(r => r !== exitRoom && openings(r).length === 1);
+    for (let i = 0; i < 2 && deadEnds.length; i++) {
+      const [x, y] = openings(deadEnds.splice(Math.floor(rng() * deadEnds.length), 1)[0])[0];
+      g[y][x] = 'L';
+    }
+  }
+
   const freeTile = r => {
     for (let i = 0; i < 60; i++) {
       const x = ri(r.x, r.x + r.w - 1), y = ri(r.y, r.y + r.h - 1);
@@ -602,7 +625,7 @@ const manh = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
 const doorAt = (x, y) => S.doors.has(key(x, y));
 const vatAt = (x, y) => S.vats.has(key(x, y));
 // Solid for movement and sight: walls, furniture and closed doors.
-const isWall = (x, y) => x < 0 || y < 0 || x >= S.w || y >= S.h || S.walls[y][x] || doorAt(x, y);
+const isWall = (x, y) => x < 0 || y < 0 || x >= S.w || y >= S.h || S.walls[y][x] || doorAt(x, y) || S.keyDoors.has(key(x, y));
 const enemyAt = (x, y) => S.enemies.find(e => e.hp > 0 && e.x === x && e.y === y);
 const isDirectional = s => s.type === 'shape' && s.shape !== 'ring';
 const nameOf = u => u.id === 'p' ? 'You' : ENEMY_TYPES[u.kind].name;
@@ -822,7 +845,7 @@ function loadRoom(idx) {
     cards: deck.map(c => ({ ...c, used: false })), burned: 0, playing: null,
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
-    doors: new Map(), props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
+    doors: new Map(), keyDoors: new Set(), props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
   };
   let n = 0;
   rows.forEach((row, y) => {
@@ -830,6 +853,7 @@ function loadRoom(idx) {
       if (c === 'P') S.player = { id: 'p', x, y, hp: MAX_HP, max: MAX_HP };
       else if (c === 'X') S.exit = { x, y };
       else if (c === '+') S.doors.set(key(x, y), DOOR_HP);
+      else if (c === 'L') S.keyDoors.add(key(x, y));
       else if (c === 'K' || c === 'F') S.furn.set(key(x, y), makeFurniture(c === 'K' ? 'desk' : 'cabinet'));
       else if (c === 'o') {
         S.props.add(key(x, y));
@@ -841,13 +865,13 @@ function loadRoom(idx) {
     }));
   });
   S.enemies.forEach(initFacing);
-  // Locked floors: one random enemy carries the keycard.
+  // Keycard floors: about a third of the staff carry a keycard (at least 2). Any one of them will do.
   S.needKey = KEYCARD_FLOORS.has(idx); S.hasKey = false;
   // Several staff carry a keycard (2 or 3, fewer if the floor has fewer people). Any one of them will do.
-  if (S.needKey) [...S.enemies].sort(() => Math.random() - 0.5).slice(0, 2 + (Math.random() < 0.5 ? 1 : 0)).forEach(e => { e.hasKey = true; });
+  if (S.needKey) [...S.enemies].sort(() => Math.random() - 0.5).slice(0, Math.max(2, Math.floor(S.enemies.length / 3)) + (Math.random() < 0.5 ? 1 : 0)).forEach(e => { e.hasKey = true; });
   buildBoard();
   log(`Corporate Tower, floor ${idx + 1}: <b>${FLOORS[idx].name}</b>. ${S.enemies.length} hostiles. Find the exit.`);
-  if (S.needKey) log(`The exit is locked. ${S.enemies.filter(e => e.hasKey).length} people here carry a keycard (marked KEY): pickpocket one, or take one down and search the body.`);
+  if (S.needKey) log(`The lift is behind keycard doors. ${S.enemies.filter(e => e.hasKey).length} people here carry a keycard (marked KEY): pickpocket one, or take one down and search the body.`);
   startRound();
 }
 
@@ -970,6 +994,7 @@ async function onTileClick(x, y) {
   if (S.busy || S.phase !== 'turn') return;
   const a = S.act, P = S.player;
   if (S.furn.has(key(x, y))) return searchFurniture(x, y);
+  if (S.keyDoors.has(key(x, y))) return swipeKeycard(x, y);
   if (a.atk && !a.atkUsed) {
     const hit = attackHit(a.atk, x, y);
     if (hit) return useAttack(hit);
@@ -985,13 +1010,8 @@ async function onTileClick(x, y) {
     a.mvUsed = true;
     S.busy = false;
     if (P.x === S.exit.x && P.y === S.exit.y) {
-      if (S.needKey && !S.hasKey) {
-        log('The exit is locked. You need the keycard.');
-        toast('Locked — get the keycard first.');
-      } else {
-        log('You slip out through the exit.');
-        return roomCleared();
-      }
+      log('You take the lift up.');
+      return roomCleared();
     }
     nextAction();
   }
@@ -1231,12 +1251,27 @@ function renderCorpses() {
   }
 }
 
+// Keycard doors open with a swipe from the next tile (free, like searching). They can't be picked or smashed.
+function swipeKeycard(x, y) {
+  const P = S.player;
+  if (Math.abs(P.x - x) + Math.abs(P.y - y) !== 1) { toast('Get next to the keycard door.'); return; }
+  if (!S.hasKey) { toast('This door needs a keycard.'); log('The reader blinks red. You need a keycard.'); return; }
+  S.keyDoors.delete(key(x, y));
+  log('You swipe the keycard. The door unlocks with a heavy clunk.');
+  renderKeyDoors(); renderUnits(); renderOverlays();
+}
+
+function renderKeyDoors() {
+  for (const t of $('#board').querySelectorAll('.tile.keydoor')) t.classList.remove('keydoor', 'unlockable');
+  for (const k of S.keyDoors) tileEl(...unkey(k)).classList.add('keydoor', ...(S.hasKey ? ['unlockable'] : []));
+}
+
 function takeKey(e) {
   e.hasKey = false; S.hasKey = true;
   floatText(e, 'KEYCARD', 'stun');
   log(`You take the <b>keycard</b> from ${nameOf(e)}. The exit is unlocked.`);
   toast('Keycard acquired — the exit is unlocked.');
-  renderExit(); renderUnits(); renderSide(); renderCorpses();
+  renderExit(); renderUnits(); renderSide(); renderCorpses(); renderKeyDoors();
 }
 
 // The turn never ends by itself: you press End turn, so there's always a moment to use a stim or serum.
@@ -1493,16 +1528,14 @@ function buildBoard() {
     b.appendChild(t);
   }
   b.style.width = S.w * T + 'px';
-  renderExit(); renderDoors(); renderLoot(); renderVats(); renderDrops();
+  renderExit(); renderDoors(); renderLoot(); renderVats(); renderDrops(); renderKeyDoors();
   const fx = document.createElement('div');
   fx.id = 'fx';
   b.appendChild(fx);
 }
 
 function renderExit() {
-  const t = $('#board .tile.exit'), locked = S.needKey && !S.hasKey;
-  t.classList.toggle('locked', locked);
-  t.innerHTML = `<span>${locked ? 'LOCKED' : 'EXIT'}</span>`;
+  $('#board .tile.exit').innerHTML = '<span>LIFT</span>';
 }
 
 function renderDoors() {
@@ -1564,7 +1597,7 @@ function drawMinimap() {
   // Only what you've seen is on the map; enemies only while you can see them.
   for (let y = 0; y < S.h; y++) for (let x = 0; x < S.w; x++) {
     const k = key(x, y);
-    c.fillStyle = !S.seen.has(k) ? '#050504' : S.doors.has(k) ? '#8a8172' : S.props.has(k) || S.furn.has(k) ? '#3a362f'
+    c.fillStyle = !S.seen.has(k) ? '#050504' : S.keyDoors.has(k) ? '#b5503a' : S.doors.has(k) ? '#8a8172' : S.props.has(k) || S.furn.has(k) ? '#3a362f'
       : S.walls[y][x] ? '#0b0a09' : S.vis.has(k) ? '#3a3630' : '#24211d';
     c.fillRect(x * s, y * s, s, s);
   }

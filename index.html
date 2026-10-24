@@ -55,8 +55,8 @@ button:disabled { opacity: .35; cursor: default; }
 .theme-pharma .floor { background: #222823; box-shadow: inset 0 0 0 1px #1a1f1b; }
 .theme-pharma .floor.alt { background: #252b26; }
 .theme-pharma .wall { background: linear-gradient(#6b6d64 0 5px, #55574f 5px); box-shadow: inset 0 0 0 1px #33352f; }
-/* Specimen vats: thick glass, murky fluid, something suspended in it. */
-.theme-pharma .prop::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 55% 60%, #3a2a24 0 18%, transparent 19%), radial-gradient(circle at 40% 35%, #8b8f52, #4f5a2e 55%, #232914 80%); box-shadow: 0 0 0 3px #5d5e57, inset 0 0 0 1px #9a9d8a; }
+/* Chemical vats: the one thing allowed to glow, because what's inside is not natural. */
+.theme-pharma .prop::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #b6ff5a, #2fae4a 45%, #0d3a1e 75%); box-shadow: 0 0 0 3px #5d5e57, 0 0 14px rgba(140,255,90,.5); }
 .theme-weapons .floor { background: radial-gradient(circle at 70% 30%, #1f1d1a 0 10%, transparent 11%), #2a2724; box-shadow: inset 0 0 0 1px #211f1c; }
 .theme-weapons .floor.alt { background: #2c2926; }
 .theme-weapons .wall { background: linear-gradient(#5b4a3d 0 5px, #46392f 5px); box-shadow: inset 0 0 0 1px #2a221c; }
@@ -72,7 +72,7 @@ button:disabled { opacity: .35; cursor: default; }
 .tile.vat { display: grid; place-items: center; }
 .tile.vat span { position: relative; z-index: 1; font: 600 11px var(--mono); color: #17130a; background: var(--ink); padding: 0 4px; border-radius: 1px; }
 /* Steel door in its frame. */
-.tile.door { background: linear-gradient(90deg, #3a3631 0 4px, #6a645a 4px 48%, #2e2b27 48% 52%, #6a645a 52% calc(100% - 4px), #3a3631 calc(100% - 4px)); box-shadow: inset 0 0 0 1px #24211d; display: grid; place-items: center; }
+#board .tile.door { background: linear-gradient(90deg, #3a3631 0 4px, #6a645a 4px 48%, #2e2b27 48% 52%, #6a645a 52% calc(100% - 4px), #3a3631 calc(100% - 4px)); box-shadow: inset 0 0 0 1px #24211d; display: grid; place-items: center; }
 .tile.door span { font: 600 11px var(--mono); color: #17130a; background: var(--ink); padding: 0 4px; border-radius: 1px; position: relative; z-index: 1; }
 .tile.drop { display: grid; place-items: center; }
 .tile.drop-stim span, .tile.drop-speed span, .tile.drop-strength span { width: 18px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--pc) 50%, #cfc8b8 50%); box-shadow: 0 1px 0 rgba(0,0,0,.6); transform: rotate(-30deg); }
@@ -80,16 +80,21 @@ button:disabled { opacity: .35; cursor: default; }
 .tile.drop-speed { --pc: #6f9a8b; }
 .tile.drop-strength { --pc: #b5503a; }
 .tile.drop-gunmod span { width: 18px; height: 10px; border-radius: 1px; background: #8a7a4a; box-shadow: inset 0 0 0 2px #3b3220, 0 1px 0 rgba(0,0,0,.6); }
-/* Supply cache: a small locker box. */
+/* Loot lying in a room shows what it is: a card, a coin (creds), or a vial coloured by potion. */
 .tile.loot { display: grid; place-items: center; }
-.tile.loot span { width: 16px; height: 13px; border-radius: 1px; background: linear-gradient(#c9a24a 0 30%, #8a6f33 30%); box-shadow: inset 0 0 0 1px #4a3b1a, 0 2px 0 rgba(0,0,0,.6); }
+.tile.loot-card span { width: 13px; height: 17px; border-radius: 1px; background: linear-gradient(#ddd4bf 0 70%, #2a251e 70%); box-shadow: 0 0 0 1px #c9a24a, 0 2px 0 rgba(0,0,0,.6); transform: rotate(-8deg); }
+.tile.loot-creds span { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #e3c06a, #a37d2c); box-shadow: inset 0 0 0 1px #6b5220, 0 2px 0 rgba(0,0,0,.6); font: 700 10px/16px var(--mono); color: #3b2d10; text-align: center; }
+.tile.loot-stim span, .tile.loot-speed span, .tile.loot-strength span { width: 18px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--pc) 50%, #cfc8b8 50%); box-shadow: 0 1px 0 rgba(0,0,0,.6); transform: rotate(-30deg); }
+.tile.loot-stim { --pc: #7fa36a; }
+.tile.loot-speed { --pc: #6f9a8b; }
+.tile.loot-strength { --pc: #b5503a; }
 .floorname { font: 400 13px var(--type); color: var(--gold); margin-top: 2px; }
 #minimap { display: block; margin-top: 10px; image-rendering: pixelated; border: 1px solid var(--line); max-width: 100%; }
 .tile::after { content: ''; position: absolute; inset: 3px; border-radius: 2px; pointer-events: none; }
 /* Stairwell out of the floor. */
-.tile.exit { background: repeating-linear-gradient(0deg, #4a463f 0 5px, #2b2824 5px 9px); box-shadow: inset 0 0 0 2px #7fa36a; display: grid; place-items: center; }
+#board .tile.exit { background: repeating-linear-gradient(0deg, #4a463f 0 5px, #2b2824 5px 9px); box-shadow: inset 0 0 0 2px #7fa36a; display: grid; place-items: center; }
 .tile.exit span { font: 700 10px var(--mono); letter-spacing: 1px; color: #e6e0d2; background: #2e3a28; padding: 0 3px; pointer-events: none; }
-.tile.exit.locked { box-shadow: inset 0 0 0 2px var(--red); }
+#board .tile.exit.locked { box-shadow: inset 0 0 0 2px var(--red); }
 .tile.exit.locked span { background: #4a2219; font-size: 9px; letter-spacing: .5px; }
 .tile.seen::before { content: ''; position: absolute; inset: 0; background: rgba(201,162,74,.16); box-shadow: inset 0 0 0 1px rgba(201,162,74,.22); pointer-events: none; }
 .tile.next::before { content: ''; position: absolute; inset: 0; background: rgba(122,90,126,.3); box-shadow: inset 0 0 0 1px rgba(122,90,126,.55); pointer-events: none; }
@@ -174,16 +179,17 @@ button:disabled { opacity: .35; cursor: default; }
 #hand .card .big { font-size: 14px; }
 #hand .card .sub { font-size: 10px; }
 #hand.locked .card { pointer-events: none; }
-.card { width: 136px; height: 150px; border-radius: 2px; background: #1e1b16; color: var(--ink); display: flex; flex-direction: column; overflow: hidden; border: 1px solid #3a352d; box-shadow: 0 4px 10px rgba(0,0,0,.5); cursor: pointer; transition: transform .12s, border-color .12s, filter .2s, opacity .2s; }
-.card:hover { transform: translateY(-3px); border-color: #6b6253; }
-.half { flex: 1; padding: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid transparent; background: linear-gradient(#24201a, #1b1814); }
+/* Cards are worn paper index cards: light faces with dark ink, so they stand out from the dark board. */
+.card { width: 136px; height: 150px; border-radius: 2px; background: #cfc5ae; color: #1e1a14; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #8a7f68; box-shadow: 0 4px 10px rgba(0,0,0,.5); cursor: pointer; transition: transform .12s, border-color .12s, filter .2s, opacity .2s; }
+.card:hover { transform: translateY(-3px); border-color: #efe6cf; }
+.half { flex: 1; padding: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid transparent; background: linear-gradient(#ddd4bf, #c6bba3); }
 .card.sel { border-color: var(--gold); }
-.card.sel .half { border-color: var(--gold); background: linear-gradient(#352c18, #241e12); }
-.card.used { filter: brightness(.4) grayscale(.8); cursor: default; }
-.card.used:hover { transform: none; border-color: #3a352d; }
+.card.sel .half { border-color: #a37d2c; background: linear-gradient(#ecd9a4, #d6bd7c); }
+.card.used { filter: brightness(.45) grayscale(.7); cursor: default; }
+.card.used:hover { transform: none; border-color: #8a7f68; }
 #hand.burning .card { filter: none; cursor: pointer; }
 #hand.burning .card.sel, #hand.burning .card.sel .half { border-color: var(--red); }
-#hand.burning .card.sel .half { background: linear-gradient(#3a1d16, #24130f); }
+#hand.burning .card.sel .half { background: linear-gradient(#e2b7a6, #c98f78); }
 /* Turn state at a glance: ready cards pulse while you still need to pick; the row fades once it's used. */
 #hand.choose .card:not(.used) { border-color: var(--gold); animation: pick-pulse 1.6s ease-in-out infinite; }
 #hand.done .card { opacity: .35; filter: saturate(.4); cursor: default; }
@@ -192,18 +198,18 @@ button:disabled { opacity: .35; cursor: default; }
 button.ready { animation: end-pulse 1.3s ease-in-out infinite; }
 @keyframes end-pulse { 50% { background: #e3c06a; box-shadow: 0 0 0 3px rgba(201,162,74,.35); } }
 @media (prefers-reduced-motion: reduce) { #hand.choose .card, button.ready { animation: none; } }
-.name { text-align: center; font: 400 13px var(--type); background: #14120e; color: var(--ink); padding: 3px; border-top: 1px solid #3a352d; }
-.big { font: 600 15px var(--mono); color: #e07a60; }
-.big.heal { color: #9dbb84; }
-.big.dash { color: #9fc0b3; }
-.sub { font-size: 11px; color: var(--muted); text-align: center; }
-.sub.heal { color: #9dbb84; font-weight: 600; font-size: 12px; }
-.rangeicon { font: 600 20px var(--mono); margin-top: 2px; color: #e07a60; }
+.name { text-align: center; font: 400 13px var(--type); background: #2a251e; color: #efe6cf; padding: 3px; border-top: 1px solid #8a7f68; }
+.big { font: 700 15px var(--mono); color: #8e2f1c; }
+.big.heal { color: #3f5f2c; }
+.big.dash { color: #2c5a4b; }
+.sub { font-size: 11px; color: #5a5040; text-align: center; }
+.sub.heal { color: #3f5f2c; font-weight: 600; font-size: 12px; }
+.rangeicon { font: 700 20px var(--mono); margin-top: 2px; color: #8e2f1c; }
 .diag { display: grid; grid-template-columns: repeat(5, 9px); gap: 2px; margin-top: 5px; }
-.diag i { width: 9px; height: 9px; background: rgba(217,210,195,.07); border-radius: 1px; }
-.diag i.me { background: var(--ink); }
-.diag i.hit { background: var(--red); }
-.diag i.opt { background: rgba(181,80,58,.45); }
+.diag i { width: 9px; height: 9px; background: rgba(30,26,20,.1); border-radius: 1px; }
+.diag i.me { background: #1e1a14; }
+.diag i.hit { background: #8e2f1c; }
+.diag i.opt { background: rgba(142,47,28,.4); }
 
 #toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid #4a4339; box-shadow: 0 6px 20px rgba(0,0,0,.6); padding: 10px 16px; border-radius: 2px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; }
 #toast.show { opacity: 1; }
@@ -672,7 +678,7 @@ function loadRoom(idx) {
     cards: deck.map(c => ({ ...c, used: false })), burned: 0, playing: null,
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
-    doors: new Map(), props: new Set(), vats: new Map(), drops: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
+    doors: new Map(), props: new Set(), vats: new Map(), drops: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
   };
   let n = 0;
   rows.forEach((row, y) => {
@@ -684,7 +690,7 @@ function loadRoom(idx) {
         S.props.add(key(x, y));
         if (S.breakable) S.vats.set(key(x, y), S.breakable.hp);
       }
-      else if (c === '$') S.loot.add(key(x, y));
+      else if (c === '$') S.loot.set(key(x, y), rollLoot(FLOORS[idx].loot) || 'creds');
       else if (ENEMY_TYPES[c]) S.enemies.push({ id: 'e' + n++, kind: c, x, y, hp: ENEMY_TYPES[c].hp, max: ENEMY_TYPES[c].hp, intent: null, alerted: false, facing: [0, 1] });
       return c === '#' || c === 'o';
     }));
@@ -911,30 +917,36 @@ function givePotion(kind, at, from) {
   renderSide();
 }
 
-// Rolls odds {card, creds, potion} (whatever is left over finds nothing) and gives the result.
-// `at` is where the pop-up text appears; `from` finishes the log line ("from Ganger", "in a parts bin").
-function grantLoot(at, odds, from, emptyMsg) {
+// Rolls odds {card, creds, potion}: returns 'card', 'creds', one of POTIONS, or null (nothing).
+function rollLoot(odds) {
+  let roll = Math.random();
+  if (roll < odds.card) return 'card';
+  roll -= odds.card;
+  if (roll < odds.creds) return 'creds';
+  roll -= odds.creds;
+  return roll < odds.potion ? randomPotion() : null;
+}
+
+// Gives one loot result. `at` is where the pop-up text appears; `from` finishes the log line
+// ("from Ganger", "from a medicine cabinet"). A card when you already own every card becomes creds.
+function giveLoot(what, at, from, emptyMsg) {
   const owned = new Set(deck.map(c => c.id));
   const pool = REWARD_CARDS.filter(c => !owned.has(c.id));
-  let roll = Math.random();
-  if (roll < odds.card && pool.length) {
+  if (what === 'card' && pool.length) {
     const card = pool[Math.floor(Math.random() * pool.length)];
     deck = [...deck, card];
     S.cards.push({ ...card, used: false });
     floatText(at, '+CARD', 'stun');
     log(`You take <b>${card.name}</b> ${from}.`);
     toast(`New card: <b>${card.name}</b> — it's yours for the run.`);
-    renderHand(); renderSide();
-    return;
-  }
-  roll -= odds.card;
-  if (roll < odds.creds) {
+    renderHand();
+  } else if (what === 'card' || what === 'creds') {
     const n = 5 + Math.floor(Math.random() * 11);
     run.creds += n;
     floatText(at, `+¥${n}`, 'stun');
     log(`You take ¥${n} creds ${from}.`);
-  } else if (roll < odds.creds + odds.potion) {
-    givePotion(randomPotion(), at, from);
+  } else if (POTIONS.includes(what)) {
+    givePotion(what, at, from);
   } else {
     floatText(at, 'EMPTY', 'stun');
     log(emptyMsg);
@@ -942,11 +954,15 @@ function grantLoot(at, odds, from, emptyMsg) {
   renderSide();
 }
 
-// Each room has one cache; walking onto it opens it. Room caches never come up empty.
+const grantLoot = (at, odds, from, emptyMsg) => giveLoot(rollLoot(odds), at, from, emptyMsg);
+
+// Each room cache's contents are decided when the floor loads, so its icon shows what's inside.
+// Walking onto it takes it.
 function openCache(x, y) {
+  const what = S.loot.get(key(x, y));
   S.loot.delete(key(x, y));
   renderLoot();
-  grantLoot({ x, y }, FLOORS[S.room].loot, `from ${FLOORS[S.room].cache}`, '');
+  giveLoot(what, { x, y }, `from ${FLOORS[S.room].cache}`, '');
 }
 
 function useStim() {
@@ -1333,11 +1349,11 @@ function renderDrops() {
 }
 
 function renderLoot() {
-  for (const t of $('#board').querySelectorAll('.tile.loot')) { t.classList.remove('loot'); t.innerHTML = ''; }
-  for (const k of S.loot) {
+  for (const t of $('#board').querySelectorAll('.tile.loot')) { t.className = t.className.replace(/\bloot(-\w+)?\b/g, '').trim(); t.innerHTML = ''; }
+  for (const [k, what] of S.loot) {
     const t = tileEl(...unkey(k));
-    t.classList.add('loot');
-    t.innerHTML = '<span></span>';
+    t.classList.add('loot', 'loot-' + what);
+    t.innerHTML = what === 'creds' ? '<span>¥</span>' : '<span></span>';
   }
 }
 
@@ -1367,7 +1383,7 @@ function drawMinimap() {
     c.fillRect(x * s, y * s, s, s);
   }
   const dot = (x, y, col) => { c.fillStyle = col; c.fillRect(x * s - 1, y * s - 1, s + 2, s + 2); };
-  for (const k of S.loot) dot(...unkey(k), '#c9a24a');
+  for (const k of S.loot.keys()) dot(...unkey(k), '#c9a24a');
   for (const [k, what] of S.drops) dot(...unkey(k), { stim: '#7fa36a', speed: '#6f9a8b', strength: '#b5503a' }[what] || '#8a7a4a');
   dot(S.exit.x, S.exit.y, S.needKey && !S.hasKey ? '#b5503a' : '#7fa36a');
   for (const e of S.enemies) dot(e.x, e.y, e.alerted ? '#e07a60' : ENEMY_TYPES[e.kind].color);

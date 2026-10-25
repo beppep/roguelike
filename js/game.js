@@ -180,7 +180,7 @@ function checkSight() {
   for (const e of S.enemies) {
     if (e.alerted) continue;
     if (!isCamera(e)) noticeBody(e);
-    if (e.alerted || !sees(e, S.player)) continue;
+    if (e.alerted || S.inDuct || !sees(e, S.player)) continue;
     if (S.hidden && manh(e, S.player) > 1) continue;
     if (S.ghost) continue;
     if (e.bribed) continue;
@@ -301,11 +301,18 @@ function cameraNextFacing(c) {
 }
 
 // An alerted enemy keeps track of you while it has a clear line to you within a few tiles of its sight range.
-const canTrack = e => manh(e, S.player) <= visionOf(e) + 3 && los(e, S.player);
+const canTrack = e => !S.inDuct && manh(e, S.player) <= visionOf(e) + 3 && los(e, S.player);
 const visionOf = e => ENEMY_TYPES[e.kind].vision + (ENEMY_TYPES[e.kind].camera ? (hasDefect('feedback') ? 2 : 0) - (hasEcho('static') ? 2 : 0) : 0);
 
-const moveReach = n => bfs(S.player.x, S.player.y, (x, y) => !isWall(x, y) && !enemyAt(x, y) && !(S.trips.has(key(x, y)) && S.seen.has(key(x, y)) && !S.tripOk), n);
-const reachTiles = n => { S.tripOk = true; const r = moveReach(n); S.tripOk = false; return [...r.dist.keys()].filter(k => k !== key(S.player.x, S.player.y)).map(k => { const [x, y] = unkey(k); return { x, y }; }); };
+const ductReach = n => bfs(S.player.x, S.player.y, (x, y) => S.ducts.has(key(x, y)), n * (hasImplant('compressed') ? 2 : 1));
+// The floor tiles you can drop onto from the grate you're at.
+const ductExits = () => !S.grates.has(key(S.player.x, S.player.y)) ? [] : DIRS.map(([dx, dy]) => ({ x: S.player.x + dx, y: S.player.y + dy })).filter(t => !isWall(t.x, t.y) && !enemyAt(t.x, t.y));
+const moveReach = n => S.inDuct ? ductReach(n) : bfs(S.player.x, S.player.y, (x, y) => !isWall(x, y) && !enemyAt(x, y) && !(S.trips.has(key(x, y)) && S.seen.has(key(x, y)) && !S.tripOk), n);
+const reachTiles = n => {
+  S.tripOk = true; const r = moveReach(n); S.tripOk = false;
+  const out = [...r.dist.keys()].filter(k => k !== key(S.player.x, S.player.y)).map(k => { const [x, y] = unkey(k); return { x, y }; });
+  return S.inDuct && n >= 1 ? out.concat(ductExits()) : out;
+};
 
 function dirTo(x, y) {
   const dx = x - S.player.x, dy = y - S.player.y;
@@ -325,6 +332,12 @@ const unitEls = new Map();
 // God mode (testing): walk any distance, and rest whenever you like without burning a card. Toggled from the header.
 let godMode = false;
 const fmtMove = n => n === Infinity ? '∞' : n;
+// God mode money: creds become infinite while it's on, and go back to what you had when it's off.
+function godCreds() {
+  if (!run) return;
+  if (godMode) { if (run.creds !== Infinity) run.realCreds = run.creds; run.creds = Infinity; }
+  else if (run.creds === Infinity) run.creds = run.realCreds || 0;
+}
 
 const FURNITURE_LOOT_CHANCE = 0.12;
 
@@ -433,35 +446,76 @@ function doHack(id) {
   openTerminal(t.x, t.y);
 }
 
-// ---------- Vents ----------
-// From next to a grate you can crawl through the ducts to any other grate you've seen (Compressed Head: any grate).
-// It uses your move for the turn. Nobody can follow you in.
-function openVent(x, y) {
-  const P = S.player;
+// ---------- Air ducts ----------
+// Step into a grate next to you (1 step) to enter the duct layer. In there you crawl with your normal steps,
+// nobody can see, hit or follow you, and you can't fight. Climb out from a grate onto the floor next to it (1 step).
+async function enterDuct(x, y) {
+  const a = S.act, P = S.player;
   if (manh(P, { x, y }) !== 1) { toast('Get next to the vent grate.'); return; }
-  if (S.act.mvUsed) { toast('You have no steps left this turn.'); return; }
-  const known = [...S.grates].filter(k => k !== key(x, y) && (S.seen.has(k) || hasImplant('compressed')));
-  if (!known.length) { toast('You don\'t know where this vent comes out yet. Find another grate.'); return; }
-  S.vent = { x, y };
-  showModal('Air vent', 'Pick the grate to crawl to. It uses your move this turn.', [['closeread', 'Stay out']],
-    `<div class="terminal-menu">${known.map(k => { const [gx, gy] = unkey(k); return `<button class="hack" data-act="vent-${k}"><b>Grate in the ${areaName(gx, gy)}</b> <span>${manh(P, { x: gx, y: gy })} tiles</span></button>`; }).join('')}</div>`);
+  if (a.mvUsed || a.move < 1) { toast('You have no steps left this turn.'); return; }
+  if (S.playing && !S.act.atkUsed && S.playing.action.type !== 'self') { S.playing = null; a.atk = null; }
+  S.busy = true;
+  S.inDuct = true;
+  sfx('vent');
+  await walk(P, [[x, y]]);
+  a.move -= 1; a.steps += 1; a.mvUsed = a.move <= 0;
+  log('You pull the grate aside and squeeze into the air duct. Down here (up here) nobody can see you.');
+  S.busy = false;
+  render();
 }
 
-async function crawlTo(k) {
-  const [gx, gy] = unkey(k), P = S.player;
-  const out = DIRS.map(([dx, dy]) => [gx + dx, gy + dy]).find(([x, y]) => !isWall(x, y) && !enemyAt(x, y));
-  $('#modal').hidden = true;
-  if (!out) { toast('Something is blocking that grate.'); return; }
+async function ductClick(x, y) {
+  const a = S.act, P = S.player, k = key(x, y);
+  if (a.mvUsed || a.move < 1) { toast('You have no steps left this turn. End your turn.'); return; }
+  // Climbing out.
+  if (ductExits().some(t => t.x === x && t.y === y)) {
+    S.busy = true;
+    S.inDuct = false;
+    await walk(P, [[x, y]]);
+    a.move -= 1; a.steps += 1; a.mvUsed = a.move <= 0;
+    sfx('vent');
+    log(`You drop out of the duct in the ${areaName(x, y)}.`);
+    S.busy = false;
+    if (P.x === S.exit.x && P.y === S.exit.y) return roomCleared();
+    checkSight();
+    return nextAction();
+  }
+  if (!S.ducts.has(k)) { toast(S.grates.has(key(P.x, P.y)) ? 'Climb out onto a floor tile next to this grate.' : 'You can only climb out through a grate.'); return; }
+  const { dist, prev } = ductReach(a.move);
+  if (!dist.has(k) || (x === P.x && y === P.y)) return;
+  const path = pathTo(prev, P.x, P.y, x, y), cost = hasImplant('compressed') ? Math.ceil(path.length / 2) : path.length;
   S.busy = true;
-  P.x = gx; P.y = gy;
-  log(`You crawl through the ducts and come out in the ${areaName(gx, gy)}.`);
-  sfx('vent');
-  await walk(P, [out]);
-  S.act.mvUsed = true; S.act.move = 0; S.act.steps++;
+  await walk(P, path);
+  a.move -= cost; a.steps += cost; a.mvUsed = a.move <= 0;
   S.busy = false;
-  if (P.x === S.exit.x && P.y === S.exit.y) return roomCleared();
-  checkSight();
   nextAction();
+}
+
+// The duct layer: one block per duct tile, with walls drawn on the sides that have no tunnel.
+function buildDucts() {
+  const layer = document.createElement('div');
+  layer.id = 'ducts';
+  S.ductEls = new Map();
+  for (const k of S.ducts) {
+    const [x, y] = unkey(k), el = document.createElement('div');
+    el.className = 'duct' + (S.grates.has(k) ? ' end' : '');
+    el.style.left = x * T + 'px'; el.style.top = y * T + 'px';
+    const side = (dx, dy) => S.ducts.has(key(x + dx, y + dy)) ? '0' : '4px';
+    el.style.borderWidth = `${side(0, -1)} ${side(1, 0)} ${side(0, 1)} ${side(-1, 0)}`;
+    layer.appendChild(el);
+    S.ductEls.set(k, el);
+  }
+  return layer;
+}
+
+function renderDucts(reach) {
+  $('#board').classList.toggle('in-duct', S.inDuct);
+  if (!S.ductEls) return;
+  for (const [k, el] of S.ductEls) {
+    el.classList.toggle('seen', S.ductSeen.has(k));
+    el.classList.toggle('vis', S.inDuct && S.vis.has(k));
+    el.classList.toggle('reach', S.inDuct && reach.has(k));
+  }
 }
 
 // ---------- Gadgets ----------
@@ -477,6 +531,7 @@ const randomGadget = () => { const ids = Object.keys(GADGETS); return ids[Math.f
 function useGadget(id) {
   if (!run.items[id] || S.busy || S.phase !== 'turn') return;
   const g = GADGETS[id];
+  if (g.throw && S.inDuct) { toast('No room to throw in a duct.'); return; }
   if (g.throw) { S.throwing = S.throwing === id ? null : id; render(); if (S.throwing) toast(`Click where to throw the ${g.name}.`); return; }
   run.items[id]--;
   if (id === 'battery') { S.energy = Math.min(energyMax(), S.energy + 2); log('You slot in a battery. +2 Energy.'); }
@@ -542,7 +597,7 @@ const VENDING_STOCK = [
 
 function openShop() {
   const rows = VENDING_STOCK.map(v => `<button data-act="buy-${v.item}" ${run.creds < v.price ? 'disabled' : ''}>${v.name}: ¥${v.price}</button>`).join('');
-  showModal('Vending machine', `You have ¥${run.creds}. The machine hums. One of the slots holds something that blinks back at you.`,
+  showModal('Vending machine', `You have ¥${fmtMove(run.creds)}. The machine hums. One of the slots holds something that blinks back at you.`,
     [['closeread', 'Done']], `<div class="shop">${rows}<button class="gacha" data-act="gacha" ${run.creds < GACHA_PRICE ? 'disabled' : ''}>The blinking slot: ¥${GACHA_PRICE}, something random</button></div>`);
 }
 
@@ -684,6 +739,7 @@ function newRun() {
   run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: 0, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gunMods: 0,
     seed: Math.floor(Math.random() * 1e6), maps: [], adapt: null, story: [], floorStats: [],
     gear: {}, implants: [], defects: [], notes: [], items: {} };
+  godCreds();
   deck = startingDeck(OPERATIVE);
   loadRoom(0);
 }
@@ -698,7 +754,7 @@ function loadRoom(idx) {
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
     doors: new Map(), keyDoors: new Set(), codeDoors: new Map(), codes: [], planned: false, keypad: null, props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
-    grates: new Set(), backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0, energy: energyMax(), freeHack: hasImplant('spinaltap'),
+    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0, energy: energyMax(), freeHack: hasImplant('spinaltap'),
     alarm: 0, reinforceIn: 0, adapt: run.adapt, noiseBonus: run.adapt === 'loud' ? 1 : 0, familiar: hasEcho('staff'), stats: { kills: 0, takedowns: 0, alerts: 0, cameras: 0, alarm: 0, pickpockets: 0, smashed: 0, hacks: 0, loot: 0 },
   };
   let n = 0;
@@ -813,6 +869,7 @@ function pickCard(card) {
   if (S.busy) return;
   if (S.phase === 'burn') { S.sel = S.sel === card ? null : card; renderHand(); renderBar(); return; }
   if (S.phase !== 'turn' || card.used || S.act.atkUsed) return;
+  if (S.inDuct && card.action.type !== 'self') { toast('There\'s no room to fight in a duct.'); return; }
   S.hoverDir = null; S.preview = null;
   if (S.playing === card) { S.playing = null; S.act.atk = null; return render(); }
   S.playing = card; S.act.atk = card.action;
@@ -845,8 +902,9 @@ function toggleGod() {
   document.body.classList.toggle('god', godMode);
   const b = document.querySelector('[data-act="god"]');
   if (b) b.textContent = godMode ? 'God mode: on' : 'God mode: off';
+  godCreds();
   if (S && S.act && S.phase === 'turn') { S.act.move = godMode ? Infinity : Math.max(0, moveStat() + serumBonus('speed') - S.act.steps); S.act.mvUsed = S.act.move <= 0; }
-  toast(godMode ? 'God mode on: walk anywhere, rest any time without burning cards.' : 'God mode off.');
+  toast(godMode ? 'God mode on: walk anywhere, rest any time without burning cards, infinite creds.' : 'God mode off.');
   render();
 }
 
@@ -916,8 +974,9 @@ async function onTileClick(x, y) {
   if (S.busy || S.phase !== 'turn') return;
   const a = S.act, P = S.player;
   if (S.throwing) return throwAt(x, y);
+  if (S.inDuct) return ductClick(x, y);
   if (S.furn.has(key(x, y))) return searchFurniture(x, y);
-  if (S.grates.has(key(x, y))) return openVent(x, y);
+  if (S.grates.has(key(x, y))) return enterDuct(x, y);
   if (S.props.has(key(x, y)) && FLOORS[S.room].theme === 'droids' && manh(P, { x, y }) === 1 && !(a.atk && !a.atkUsed)) {
     showModal('Droid husk', '', [['closeread', 'Close']], `<div class="doc mail"><p>${DROID_LOGS[(x * 7 + y) % DROID_LOGS.length]}</p></div>`);
     return;
@@ -1046,7 +1105,7 @@ const canBribe = e => !e.alerted && !e.bribed && !isCamera(e) && !ENEMY_TYPES[e.
 
 function offerBribe(e) {
   S.bribeTarget = e;
-  showModal(`Bribe the ${ENEMY_TYPES[e.kind].name.toLowerCase()}?`, `¥${BRIBE_PRICE} and they never saw you. You have ¥${run.creds}.`,
+  showModal(`Bribe the ${ENEMY_TYPES[e.kind].name.toLowerCase()}?`, `¥${BRIBE_PRICE} and they never saw you. You have ¥${fmtMove(run.creds)}.`,
     [['bribe', 'Pay'], ['closeread', 'Leave it']]);
   if (run.creds < BRIBE_PRICE) $('#modal [data-act="bribe"]').disabled = true;
 }
@@ -1452,7 +1511,7 @@ async function sniperTurn(e) {
     const end = line[line.length - 1] || P;
     await shot(e, end);
     makeNoise(e.x, e.y, NOISE.gun, e, true);
-    const victim = [P, ...S.enemies].find(u => u !== e && line.some(t => t.x === u.x && t.y === u.y));
+    const victim = [...(S.inDuct ? [] : [P]), ...S.enemies].find(u => u !== e && line.some(t => t.x === u.x && t.y === u.y));
     if (victim === P) { const dmg = reduceHit(SNIPER_DMG, { range: 1 }); log(`The sniper's round hits you for ${dmg}.`); damage(P, dmg); }
     else if (victim) { log(`The sniper's round hits ${nameOf(victim)}.`); damage(victim, SNIPER_DMG); }
     else log('The sniper\'s round cracks past you.');
@@ -1565,7 +1624,7 @@ function predictPatrol(e) {
 // `goal` is you while it can see you, otherwise the spot where it last saw you.
 async function attackTurn(e, goal) {
   const it = e.intent, P = S.player, tracking = goal === P;
-  const canHit = (x, y) => it.atk > 0 && (it.range
+  const canHit = (x, y) => !S.inDuct && it.atk > 0 && (it.range
     ? manh({ x, y }, P) <= it.range && los({ x, y }, P)
     : manh({ x, y }, P) === 1);
 
@@ -1643,7 +1702,7 @@ function burn(u) {
 // End of each round: whoever stands in fire burns, fire creeps along oil and chemicals, then dies down.
 async function tickFire() {
   if (!S.fire.size) return;
-  for (const u of [S.player, ...S.enemies]) if (S.fire.has(key(u.x, u.y))) burn(u);
+  for (const u of [S.player, ...S.enemies]) if (S.fire.has(key(u.x, u.y)) && !(u === S.player && S.inDuct)) burn(u);
   const spread = [];
   for (const k of S.fire.keys()) {
     const [x, y] = unkey(k);
@@ -1687,7 +1746,8 @@ async function walk(u, path) {
     u.facing = [x - u.x, y - u.y];
     u.x = x; u.y = y;
     renderUnits(); renderOverlays();
-    if (u === S.player) {
+    if (u === S.player && S.inDuct) sfx('step');
+    else if (u === S.player) {
       sfx('step');
       if (S.trips.has(key(x, y))) {
         S.trips.delete(key(x, y));
@@ -2032,6 +2092,7 @@ function buildBoard() {
   }
   b.style.width = S.w * T + 'px';
   renderExit(); renderDoors(); renderLoot(); renderVats(); renderDrops(); renderKeyDoors(); renderCodeDoors(); renderFurnStory();
+  b.appendChild(buildDucts());
   const fx = document.createElement('div');
   fx.id = 'fx';
   b.appendChild(fx);
@@ -2140,6 +2201,12 @@ function intentHTML(e) {
 // block it; the wall or door itself is visible). Everything you have ever seen stays remembered in S.seen.
 const SIGHT_RADIUS = 9;
 function computeFov() {
+  if (S.inDuct) {
+    S.vis = new Set(ductReach(7).dist.keys());
+    for (const k of S.vis) S.ductSeen.add(k);
+    for (const t of ductExits()) { S.vis.add(key(t.x, t.y)); S.seen.add(key(t.x, t.y)); }
+    return;
+  }
   const P = S.player, R = SIGHT_RADIUS + (hasGear('visor') ? 3 : 0);
   S.vis = new Set([key(P.x, P.y)]);
   for (let y = P.y - R; y <= P.y + R; y++) for (let x = P.x - R; x <= P.x + R; x++) {
@@ -2154,7 +2221,7 @@ function computeFov() {
   }
   for (const k of S.vis) S.seen.add(k);
 }
-const visible = u => S.vis.has(key(u.x, u.y)) || (u.id !== 'p' && hasImplant('echo') && manh(u, S.player) <= 5);
+const visible = u => (S.inDuct ? !S.ducts.has(key(u.x, u.y)) && S.vis.has(key(u.x, u.y)) : S.vis.has(key(u.x, u.y))) || (u.id !== 'p' && hasImplant('echo') && manh(u, S.player) <= 5);
 
 function renderUnits() {
   computeFov();
@@ -2230,7 +2297,9 @@ function renderOverlays() {
     t.classList.toggle('unseen', !S.seen.has(k) && !S.planned);
     t.classList.toggle('planned', !S.seen.has(k) && S.planned);
     t.classList.toggle('fog', S.seen.has(k) && !S.vis.has(k));
+    t.classList.toggle('duct-exit', S.inDuct && c === 'reach' && !S.ducts.has(k));
   }
+  renderDucts(new Set([...cls].filter(([, c]) => c === 'reach').map(([k]) => k)));
 }
 
 function renderSide() {
@@ -2249,7 +2318,7 @@ function renderSide() {
     <div class="panel">
       <div class="row"><span>Cards ready</span><b>${S.cards.filter(c => !c.used).length} / ${S.cards.length}</b></div>
       <div class="row"><span>Burned</span><b>${S.burned}</b></div>
-      <div class="row"><span>Creds</span><b>¥${run.creds}</b></div>
+      <div class="row"><span>Creds</span><b>¥${fmtMove(run.creds)}</b></div>
       ${S.codes.length ? `<div class="note">Codes found:</div>${S.codes.map(c => `<div class="row"><span>${c.label}</span><b>${c.code}</b></div>`).join("")}` : ""}
       ${run.gunMods ? `<div class="row"><span>Gun mods</span><b>+${run.gunMods} gun damage</b></div>` : ''}
       <div class="row"><span>Healing stims</span><b>${run.stims} <button class="mini-btn" data-act="stim" ${run.stims && canUseItem ? '' : 'disabled'}>Heal +${STIM_HEAL}</button></b></div>
@@ -2284,6 +2353,7 @@ function renderBar() {
     else if (!a.atkUsed) hint = (isDirectional(a.atk) ? 'Point toward a target and click a red tile' : 'Click a red target')
       + ` to use <b>${c.name}</b>. Click the card again to put it back.`;
     else hint = a.mvUsed ? 'Done for this turn. Use a stim or serum if you like, then end your turn.' : (a.steps ? `You have ${fmtMove(a.move)} step${a.move > 1 ? 's' : ''} left. Click a blue tile, or end your turn.` : 'Click a blue tile to move, or end your turn.');
+    if (S.inDuct) hint = `<b>In the air ducts.</b> Nobody can see you. ${S.grates.has(key(S.player.x, S.player.y)) ? 'Click the floor next to this grate to climb out, or crawl on.' : 'Crawl along the duct (blue). Climb out at a grate.'}`;
     const bonus = '';
     bar.innerHTML = `
       <div class="hint">${hint}</div>
@@ -2400,7 +2470,6 @@ document.addEventListener('click', e => {
   else if (act === 'title') showTitle();
   else if (act.startsWith('hack-')) doHack(act.slice(5));
   else if (act.startsWith('gadget-')) useGadget(act.slice(7));
-  else if (act.startsWith('vent-')) crawlTo(act.slice(5));
   else if (act.startsWith('install-')) { $('#modal').hidden = true; installImplant(act.slice(8)); run.notes.splice(0).forEach(log); render(); }
   else if (act === 'ending-echo') showEcho();
   else if (act.startsWith('ending-')) showEnding(+act.slice(7));

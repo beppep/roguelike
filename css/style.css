@@ -393,3 +393,16 @@ button.ready { animation: end-pulse 1.3s ease-in-out infinite; }
 
 /* God mode is on: the header button says so in red. */
 body.god [data-act="god"] { background: var(--red); color: #fff; border-color: var(--red); }
+
+/* Air ducts: a layer above the floor. Inside, the building below goes dark and the tunnel is what you see. */
+#ducts { position: absolute; inset: 0; pointer-events: none; z-index: 1; display: none; }
+#board.in-duct #ducts { display: block; }
+#board.in-duct .tile:not(.duct-exit) { filter: brightness(.16) saturate(.2) !important; }
+#board.in-duct .puddle, #board.in-duct .corpse { opacity: .12; }
+.duct { position: absolute; width: var(--T); height: var(--T); box-sizing: border-box; visibility: hidden;
+  background: repeating-linear-gradient(90deg, #4a4e53 0 2px, #3a3d41 2px 9px); border: 0 solid #1b1c1e; filter: brightness(.45); }
+.duct.seen { visibility: visible; }
+.duct.vis { filter: none; }
+.duct.end { background: repeating-linear-gradient(0deg, #6a6e73 0 3px, #26282b 3px 7px); }
+.duct.reach::after { content: ''; position: absolute; inset: 5px; border: 2px solid var(--blue); border-radius: 2px; opacity: .85; }
+#board.in-duct .tile.duct-exit { box-shadow: inset 0 0 0 2px var(--blue) !important; }

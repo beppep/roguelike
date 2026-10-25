@@ -14,7 +14,7 @@ function mulberry32(a) {
 // K desk with a computer and F filing cabinet (solid; search them from next door), $ loot cache,
 // L keycard door, C keypad door, S wall safe, V vending machine, T networked terminal, G vent grate (in a wall),
 // P player, X exit (the lift up), g/d/e/k/m/a enemies (ganger, drone, enforcer, cultist, golem, avatar), v clerk, c camera, n sniper, y daemon, b backroom floor, A altar, r blood circle floor,
-// Z fire stairs, Q Bazaar contact, H dream phone, w laser tripwire (floor).
+// Z fire stairs, Q Bazaar contact, H dream phone, w laser tripwire (floor). The air ducts are returned as rows.ducts.
 function generateFloor(f) {
   const rng = mulberry32(f.seed + (f.runSeed || 0));
   const ri = (a, b) => a + Math.floor(rng() * (b - a + 1)), pick = a => a[Math.floor(rng() * a.length)];
@@ -302,12 +302,28 @@ function generateFloor(f) {
   const ventRooms = [...rooms].sort(() => rng() - 0.5);
   let vents = 0;
   for (const r of ventRooms) {
-    if (vents >= 3 && (rng() > 0.2 || vents >= 7)) continue;
+    if (vents >= 6 && (rng() > 0.3 || vents >= 10)) continue;
     const spots = grateSpots(r);
     if (!spots.length) continue;
     const [x, y] = spots[Math.floor(rng() * spots.length)];
     g[y][x] = 'G'; vents++;
   }
+  // Air ducts: each grate joins its nearest grate with an L-shaped tunnel (if it's close enough). A grate with
+  // nothing in reach goes back to plain wall.
+  const grates = [];
+  for (let y = 0; y < f.h; y++) for (let x = 0; x < f.w; x++) if (g[y][x] === 'G') grates.push([x, y]);
+  const ducts = new Set(), linked = new Set();
+  const tunnel = ([ax, ay], [bx, by]) => {
+    const [cx, cy] = rng() < 0.5 ? [bx, ay] : [ax, by];
+    const line = (x0, y0, x1, y1) => { for (let x = x0, y = y0; ; x += Math.sign(x1 - x0), y += Math.sign(y1 - y0)) { ducts.add(key(x, y)); if (x === x1 && y === y1) break; } };
+    line(ax, ay, cx, cy); line(cx, cy, bx, by);
+    linked.add(key(ax, ay)); linked.add(key(bx, by));
+  };
+  for (const a of grates) {
+    const near = grates.filter(b => b !== a).map(b => [b, Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1])]).sort((p, q) => p[1] - q[1])[0];
+    if (near && near[1] <= DUCT_MAX) tunnel(a, near[0]);
+  }
+  for (const [x, y] of grates) if (!linked.has(key(x, y))) g[y][x] = '#';
   // Office staff ('v') wander the rooms away from the start.
   const staffRooms = rooms.filter(r => Math.abs(r.cx - start.cx) + Math.abs(r.cy - start.cy) > 6);
   for (let i = 0; i < (f.civilians || 0) && staffRooms.length; i++) {
@@ -340,6 +356,8 @@ function generateFloor(f) {
     const c = corners.find(([x, y]) => g[y][x] === '.' && DIRS.every(([dx, dy]) => inRoom(x + dx, y + dy) || g[y + dy][x + dx] === '#'));
     if (c) { g[c[1]][c[0]] = 'c'; cams++; }
   }
-  return g.map(row => row.join(''));
+  const out = g.map(row => row.join(''));
+  out.ducts = [...ducts];  // the duct layer rides along with the map rows
+  return out;
 }
 

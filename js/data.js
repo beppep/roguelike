@@ -189,7 +189,7 @@ const IMPLANTS = {
   echo:      { name: 'Echolocator',          text: 'You see people through walls within 5 tiles.' },
   autophage: { name: 'Autophage Gland',      text: 'Searching a body also feeds you from it: heal 3.' },
   spinaltap: { name: 'Spinal Tap',           text: '+2 Energy, and your first hack on each floor is free.' },
-  compressed:{ name: 'Compressed Head',      text: 'Vents can take you to grates you have never seen.' },
+  compressed:{ name: 'Compressed Head',      text: 'In the air ducts every step goes twice as far.' },
   chameleon: { name: 'Dermal Chameleon',     text: 'End a turn without moving and nobody who hasn\'t spotted you can see you (except from right next to you) until your next turn.' },
 };
 const DEFECTS = {
@@ -274,3 +274,9 @@ const TRIPWIRES = [0, 3, 3, 0, 2];
 
 // Each hack has this chance to be traced by the Head's ICE (alarm +1). A Signal Jammer stops traces.
 const TRACE_CHANCE = 0.2;
+
+// ---------- Air ducts ----------
+// A layer above the floor. Each vent grate is joined to its nearest grate by a tunnel if that grate is at most
+// DUCT_MAX tiles away (as the crow walks); tunnels that cross make small networks. Inside, you crawl with your
+// normal steps, nobody can see or follow you, and you climb out through any grate.
+const DUCT_MAX = 14;

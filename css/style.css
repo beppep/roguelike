@@ -1,0 +1,395 @@
+/* Look: a real corporate building seen from above, at night. Concrete, tile, steel; muted bone, rust,
+   ochre and verdigris. Colour marks what matters (danger, your options); nothing glows for decoration.
+   UI type reads like a typed company dossier. */
+:root {
+  --T: 46px;
+  --bg: #0e0d0b;        /* night, outside the building */
+  --panel: #171512;     /* dossier panels */
+  --line: #2f2b25;      /* rules, borders */
+  --ink: #d9d2c3;       /* bone: main text, you */
+  --muted: #8a8172;     /* secondary text */
+  --gold: #c9a24a;      /* ochre: picked / ready / loot */
+  --blue: #6f9a8b;      /* verdigris: your movement */
+  --red: #b5503a;       /* rust: attacks, danger */
+  --plum: #7a5a7e;      /* what enemies will see next */
+  --mono: "IBM Plex Mono", Consolas, ui-monospace, monospace;
+  --type: "Special Elite", "Courier New", Courier, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.45 var(--mono); }
+#app { max-width: 1400px; margin: 0 auto; padding: 12px 16px; }
+header { display: flex; align-items: baseline; gap: 16px; margin-bottom: 12px; }
+h1 { font: 400 22px var(--type); margin: 0; letter-spacing: 1px; color: var(--ink); }
+h1 span { color: var(--muted); font: 400 13px var(--mono); margin-left: 10px; letter-spacing: 1px; }
+.spacer { flex: 1; }
+
+button { font: 13px var(--mono); border-radius: 2px; border: 1px solid var(--line); background: #1d1a16; color: var(--ink); padding: 7px 14px; cursor: pointer; }
+button:hover:not(:disabled) { background: #26221c; border-color: var(--muted); }
+button:focus-visible { outline: 2px solid var(--gold); outline-offset: 2px; }
+button.primary { background: var(--gold); color: #17130a; border-color: var(--gold); font-weight: 600; letter-spacing: .5px; }
+button.primary:hover:not(:disabled) { background: #d8b45e; }
+button:disabled { opacity: .35; cursor: default; }
+
+/* Board, action bar and cards fill the left; map, stats and log sit in a narrow column on the right. */
+#layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 14px; align-items: start; }
+#viewport { position: relative; width: 100%; height: max(300px, calc(100vh - 320px)); overflow: hidden; background: #0b0a09; border: 1px solid var(--line); }
+#board { position: absolute; left: 0; top: 0; display: grid; user-select: none; transition: transform .18s ease-out; }
+.tile { width: var(--T); height: var(--T); position: relative; }
+.void { background: #0b0a09; }
+/* Default: worn office linoleum and poured concrete walls (the light top edge reads as wall height). */
+.floor { background: #23211d; box-shadow: inset 0 0 0 1px #1b1916; }
+.floor.alt { background: #25231f; }
+.wall { background: linear-gradient(#5a564f 0 5px, #46433d 5px); box-shadow: inset 0 0 0 1px #2c2a26; }
+
+/* Floor themes: the building is ordinary; what gets made on each floor is not. */
+.theme-pharma .floor { background: #222823; box-shadow: inset 0 0 0 1px #1a1f1b; }
+.theme-pharma .floor.alt { background: #252b26; }
+.theme-pharma .wall { background: linear-gradient(#6b6d64 0 5px, #55574f 5px); box-shadow: inset 0 0 0 1px #33352f; }
+/* Chemical vats: the one thing allowed to glow, because what's inside is not natural. */
+.theme-pharma .prop::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #b6ff5a, #2fae4a 45%, #0d3a1e 75%); box-shadow: 0 0 0 3px #5d5e57, 0 0 14px rgba(140,255,90,.5); }
+.theme-weapons .floor { background: radial-gradient(circle at 70% 30%, #1f1d1a 0 10%, transparent 11%), #2a2724; box-shadow: inset 0 0 0 1px #211f1c; }
+.theme-weapons .floor.alt { background: #2c2926; }
+.theme-weapons .wall { background: linear-gradient(#5b4a3d 0 5px, #46392f 5px); box-shadow: inset 0 0 0 1px #2a221c; }
+/* Munitions crates: olive wood, stencilled stripe. */
+.theme-weapons .prop::before { content: ''; position: absolute; inset: 5px; border-radius: 1px; background: linear-gradient(#4d4d2f 0 40%, #c9a24a 40% 52%, #4d4d2f 52%); box-shadow: inset 0 0 0 2px #2f2f1c, 0 2px 0 rgba(0,0,0,.5); }
+.theme-droids .floor { background: repeating-linear-gradient(90deg, #24262a 0 3px, #1c1e21 3px 6px); }
+.theme-droids .floor.alt { background: repeating-linear-gradient(0deg, #24262a 0 3px, #1c1e21 3px 6px); }
+.theme-droids .wall { background: linear-gradient(#5c6066 0 5px, transparent 5px), repeating-linear-gradient(90deg, #45484d 0 4px, #3c3f44 4px 8px); box-shadow: inset 0 0 0 1px #2a2c30; }
+/* Dormant droid husks: dull steel, one dim eye. */
+.theme-droids .prop::before { content: ''; position: absolute; inset: 7px; border-radius: 40% 40% 20% 20%; background: linear-gradient(#5d6168, #33363b); box-shadow: inset 0 0 0 2px #6d7178, 0 2px 0 rgba(0,0,0,.5); }
+.theme-droids .prop::after { content: ''; position: absolute; left: 50%; top: 40%; width: 8px; height: 3px; margin-left: -4px; border-radius: 1px; background: #8a3a2c; }
+
+.tile.vat { display: grid; place-items: center; }
+.tile.vat span { position: relative; z-index: 1; font: 600 11px var(--mono); color: #17130a; background: var(--ink); padding: 0 4px; border-radius: 1px; }
+/* Steel door in its frame. */
+#board .tile.door { background: linear-gradient(90deg, #3a3631 0 4px, #6a645a 4px 48%, #2e2b27 48% 52%, #6a645a 52% calc(100% - 4px), #3a3631 calc(100% - 4px)); box-shadow: inset 0 0 0 1px #24211d; display: grid; place-items: center; }
+.tile.door span { font: 600 11px var(--mono); color: #17130a; background: var(--ink); padding: 0 4px; border-radius: 1px; position: relative; z-index: 1; }
+.tile.drop { display: grid; place-items: center; }
+.tile.drop-stim span, .tile.drop-speed span, .tile.drop-strength span { width: 18px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--pc) 50%, #cfc8b8 50%); box-shadow: 0 1px 0 rgba(0,0,0,.6); transform: rotate(-30deg); }
+.tile.drop-stim { --pc: #7fa36a; }
+.tile.drop-speed { --pc: #6f9a8b; }
+.tile.drop-strength { --pc: #b5503a; }
+.tile.drop-gunmod span { width: 18px; height: 10px; border-radius: 1px; background: #8a7a4a; box-shadow: inset 0 0 0 2px #3b3220, 0 1px 0 rgba(0,0,0,.6); }
+/* Loot lying in a room shows what it is: a card, a coin (creds), or a vial coloured by potion. */
+.tile.loot { display: grid; place-items: center; }
+.tile.loot-card span { width: 13px; height: 17px; border-radius: 1px; background: linear-gradient(#ddd4bf 0 70%, #2a251e 70%); box-shadow: 0 0 0 1px #c9a24a, 0 2px 0 rgba(0,0,0,.6); transform: rotate(-8deg); }
+.tile.loot-creds span { width: 16px; height: 16px; border-radius: 50%; background: radial-gradient(circle at 40% 35%, #e3c06a, #a37d2c); box-shadow: inset 0 0 0 1px #6b5220, 0 2px 0 rgba(0,0,0,.6); font: 700 10px/16px var(--mono); color: #3b2d10; text-align: center; }
+.tile.loot-stim span, .tile.loot-speed span, .tile.loot-strength span { width: 18px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, var(--pc) 50%, #cfc8b8 50%); box-shadow: 0 1px 0 rgba(0,0,0,.6); transform: rotate(-30deg); }
+.tile.loot-stim { --pc: #7fa36a; }
+.tile.loot-speed { --pc: #6f9a8b; }
+.tile.loot-strength { --pc: #b5503a; }
+.floorname { font: 400 13px var(--type); color: var(--gold); margin-top: 2px; }
+#minimap { display: block; margin-top: 10px; image-rendering: pixelated; border: 1px solid var(--line); max-width: 100%; }
+.tile::after { content: ''; position: absolute; inset: 3px; border-radius: 2px; pointer-events: none; }
+/* Stairwell out of the floor. */
+#board .tile.exit { background: repeating-linear-gradient(0deg, #4a463f 0 5px, #2b2824 5px 9px); box-shadow: inset 0 0 0 2px #7fa36a; display: grid; place-items: center; }
+.tile.exit span { font: 700 10px var(--mono); letter-spacing: 1px; color: #e6e0d2; background: #2e3a28; padding: 0 3px; pointer-events: none; }
+#board .tile.exit.locked { box-shadow: inset 0 0 0 2px var(--red); }
+.tile.exit.locked span { background: #4a2219; font-size: 9px; letter-spacing: .5px; }
+.tile.seen::before { content: ''; position: absolute; inset: 0; background: rgba(201,162,74,.16); box-shadow: inset 0 0 0 1px rgba(201,162,74,.22); pointer-events: none; }
+.tile.next::before { content: ''; position: absolute; inset: 0; background: rgba(122,90,126,.3); box-shadow: inset 0 0 0 1px rgba(122,90,126,.55); pointer-events: none; }
+.tile.reach { cursor: pointer; }
+.tile.reach::after { background: rgba(111,154,139,.22); box-shadow: inset 0 0 0 1px rgba(111,154,139,.75); }
+.tile.range::after { background: rgba(181,80,58,.12); }
+.tile.target { cursor: crosshair; }
+.tile.target::after { background: rgba(181,80,58,.32); box-shadow: inset 0 0 0 2px var(--red); }
+.tile.preview { cursor: crosshair; }
+.tile.preview::after { background: rgba(181,80,58,.45); box-shadow: inset 0 0 0 2px #d98a72; }
+
+#fx { position: absolute; inset: 0; pointer-events: none; }
+.unit { position: absolute; width: var(--T); height: var(--T); transition: left .14s linear, top .14s linear, transform .1s ease-out, opacity .35s; z-index: 2; }
+/* People seen from above: a dark body with a coloured rim and their letter. */
+.token { position: absolute; inset: 8px; border-radius: 50%; display: grid; place-items: center; font: 700 15px var(--mono); color: var(--c); background: #15130f; border: 2px solid var(--c); box-shadow: 0 2px 0 rgba(0,0,0,.6); }
+.token b { font-weight: 700; }
+.unit.player .token { background: #2a2620; color: #f1ead9; border-color: #f1ead9; }
+.eye { position: absolute; left: 50%; top: 50%; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-bottom: 8px solid var(--gold); transform: translate(-50%, -50%) rotate(var(--rot)) translateY(-19px); transition: transform .15s; z-index: 1; }
+.unit.aware .eye { border-bottom-color: var(--red); }
+.unit.haskey::after { content: 'KEY'; position: absolute; left: -3px; bottom: 7px; padding: 0 3px; border-radius: 1px; background: var(--gold); color: #17130a; font: 700 9px/14px var(--mono); letter-spacing: .5px; z-index: 2; }
+.ok { color: #9dbb84; }
+.mini-btn { padding: 1px 6px; margin-left: 6px; font: 500 11px var(--mono); }
+.buff { font: 500 11px var(--mono); color: #9dbb84; margin: -1px 0 3px; }
+.unit.acting .token { box-shadow: 0 0 0 3px var(--ink); }
+.unit.hit .token { animation: shake .3s; }
+.unit.dead { opacity: 0; }
+.hp { position: absolute; left: 10px; right: 10px; bottom: 2px; height: 4px; background: rgba(0,0,0,.7); border-radius: 1px; overflow: hidden; }
+.hp i { display: block; height: 100%; background: #9dbb84; transition: width .2s; }
+.hpnum { position: absolute; right: 0; top: 0; min-width: 18px; height: 16px; padding: 0 4px; border-radius: 1px; background: #0e0d0b; border: 1px solid var(--line); font: 600 11px var(--mono); display: grid; place-items: center; z-index: 1; }
+@keyframes shake { 0%,100% { translate: 0; } 25% { translate: -4px; filter: brightness(1.8); } 75% { translate: 4px; } }
+
+.intent { position: absolute; transform: translate(-50%, calc(-100% + 8px)); background: #1d1a16; color: var(--ink); border: 1px solid #4a4339; border-radius: 1px; padding: 2px 7px; font: 11px/1.25 var(--mono); white-space: nowrap; text-align: center; box-shadow: 0 2px 6px rgba(0,0,0,.6); z-index: 10; transition: left .14s linear, top .14s linear; }
+.intent:empty { display: none; }
+.intent span { display: block; }
+.intent .m { color: #9fc0b3; }
+.intent .idle { color: var(--muted); font-style: italic; }
+.intent .a { color: #e07a60; font-weight: 600; }
+.intent small { color: var(--gold); }
+.intent.acting { border-color: var(--gold); }
+.intent .stun { color: var(--gold); font-weight: 600; }
+
+.float { position: absolute; transform: translate(-50%, -50%); font: 700 19px var(--mono); pointer-events: none; animation: rise .9s ease-out forwards; z-index: 20; text-shadow: 0 2px 0 #000, 0 0 4px #000; }
+.float.dmg { color: #e07a60; }
+.float.alert { color: var(--gold); font-size: 28px; }
+.float.heal { color: #9dbb84; }
+.float.stun { color: var(--gold); font-size: 15px; }
+@keyframes rise { from { opacity: 1; margin-top: 0; } to { opacity: 0; margin-top: -36px; } }
+.shot { position: absolute; width: 12px; height: 3px; border-radius: 1px; background: #e6dcc0; transform: translate(-50%, -50%); transition: left .2s linear, top .2s linear; z-index: 15; }
+
+#side { display: flex; flex-direction: column; gap: 10px; position: sticky; top: 12px; font-size: 13px; }
+#side .panel { padding: 10px; }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 2px; padding: 12px; }
+.row { display: flex; justify-content: space-between; padding: 2px 0; }
+.hpbig { position: relative; height: 20px; margin-top: 8px; background: #0e0d0b; border: 1px solid var(--line); overflow: hidden; }
+.hpbig i { position: absolute; inset: 0 auto 0 0; background: #5f7a4f; transition: width .25s; }
+.hpbig span { position: relative; display: block; text-align: center; font: 600 12px/18px var(--mono); color: #f1ead9; text-shadow: 0 1px 0 #000; }
+.mini { color: var(--muted); font-size: 12px; margin: 0 0 4px; }
+.lost { color: #e07a60; }
+.note { color: var(--muted); font-size: 12px; margin-top: 6px; border-top: 1px solid var(--line); padding-top: 6px; }
+.key { display: inline-block; width: 11px; height: 11px; margin: 0 5px -1px 0; border-radius: 1px; }
+.key.seen { background: rgba(201,162,74,.5); }
+.key.next { background: rgba(122,90,126,.65); margin-left: 8px; }
+.log { font: 12px/1.4 var(--mono); color: var(--muted); max-height: 190px; overflow: hidden; }
+.log div::before { content: '— '; color: #5a5348; }
+.log div { padding: 1px 0; }
+.log div:last-child { color: var(--ink); }
+
+#bar { display: flex; align-items: center; gap: 14px; margin: 14px 0 10px; min-height: 44px; flex-wrap: wrap; }
+.hint { flex: 1; color: #bdb5a6; min-width: 260px; }
+.hint b { color: var(--ink); font-weight: 600; }
+.chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { padding: 5px 11px; border-radius: 1px; border: 1px solid var(--line); background: #1a1814; font: 13px var(--mono); }
+.chip.atk { border-color: #6e3a2c; color: #e07a60; }
+.chip.mv { border-color: #3e5a50; color: #9fc0b3; }
+.chip.used { opacity: .4; }
+.chip.empty { color: var(--muted); border-style: dashed; }
+
+/* All cards on one row: they shrink to fit instead of wrapping. Cards look like worn index cards. */
+#hand { display: flex; gap: 8px; flex-wrap: nowrap; min-height: 132px; }
+#hand .card { flex: 1 1 0; min-width: 0; max-width: 136px; height: 130px; }
+#hand .card .name { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#hand .card .big { font-size: 14px; }
+#hand .card .sub { font-size: 10px; }
+#hand.locked .card { pointer-events: none; }
+/* Cards are worn paper index cards: light faces with dark ink, so they stand out from the dark board. */
+.card { width: 136px; height: 150px; border-radius: 2px; background: #cfc5ae; color: #1e1a14; display: flex; flex-direction: column; overflow: hidden; border: 1px solid #8a7f68; box-shadow: 0 4px 10px rgba(0,0,0,.5); cursor: pointer; transition: transform .12s, border-color .12s, filter .2s, opacity .2s; }
+.card:hover { transform: translateY(-3px); border-color: #efe6cf; }
+.half { flex: 1; padding: 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid transparent; background: linear-gradient(#ddd4bf, #c6bba3); }
+.card.sel { border-color: var(--gold); }
+.card.sel .half { border-color: #a37d2c; background: linear-gradient(#ecd9a4, #d6bd7c); }
+.card.used { filter: brightness(.45) grayscale(.7); cursor: default; }
+.card.used:hover { transform: none; border-color: #8a7f68; }
+#hand.burning .card { filter: none; cursor: pointer; }
+#hand.burning .card.sel, #hand.burning .card.sel .half { border-color: var(--red); }
+#hand.burning .card.sel .half { background: linear-gradient(#e2b7a6, #c98f78); }
+/* Turn state at a glance: ready cards pulse while you still need to pick; the row fades once it's used. */
+#hand.choose .card:not(.used) { border-color: var(--gold); animation: pick-pulse 1.6s ease-in-out infinite; }
+#hand.done .card { opacity: .35; filter: saturate(.4); cursor: default; }
+#hand.done .card:hover { transform: none; }
+@keyframes pick-pulse { 50% { border-color: #f0d38a; filter: brightness(1.18); } }
+button.ready { animation: end-pulse 1.3s ease-in-out infinite; }
+@keyframes end-pulse { 50% { background: #e3c06a; box-shadow: 0 0 0 3px rgba(201,162,74,.35); } }
+@media (prefers-reduced-motion: reduce) { #hand.choose .card, button.ready { animation: none; } }
+.name { text-align: center; font: 400 13px var(--type); background: #2a251e; color: #efe6cf; padding: 3px; border-top: 1px solid #8a7f68; }
+.big { font: 700 15px var(--mono); color: #8e2f1c; }
+.big.heal { color: #3f5f2c; }
+.big.dash { color: #2c5a4b; }
+.sub { font-size: 11px; color: #5a5040; text-align: center; }
+.sub.heal { color: #3f5f2c; font-weight: 600; font-size: 12px; }
+.rangeicon { font: 700 20px var(--mono); margin-top: 2px; color: #8e2f1c; }
+.diag { display: grid; grid-template-columns: repeat(5, 9px); gap: 2px; margin-top: 5px; }
+.diag i { width: 9px; height: 9px; background: rgba(30,26,20,.1); border-radius: 1px; }
+.diag i.me { background: #1e1a14; }
+.diag i.hit { background: #8e2f1c; }
+.diag i.opt { background: rgba(142,47,28,.4); }
+
+#toast { position: fixed; top: 18px; left: 50%; transform: translateX(-50%); background: var(--panel); border: 1px solid #4a4339; box-shadow: 0 6px 20px rgba(0,0,0,.6); padding: 10px 16px; border-radius: 2px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; }
+#toast.show { opacity: 1; }
+#modal { position: fixed; inset: 0; background: rgba(8,7,6,.8); display: grid; place-items: center; z-index: 60; }
+#modal[hidden] { display: none; }
+#modal .box { background: var(--panel); border: 1px solid #4a4339; padding: 24px 28px; border-radius: 2px; text-align: center; min-width: 300px; box-shadow: 0 20px 50px rgba(0,0,0,.7); }
+#modal h2 { margin: 0 0 8px; font: 400 26px var(--type); color: var(--ink); }
+#modal p { color: #bdb5a6; margin: 0 0 18px; }
+#modal .box.wide { max-width: min(820px, calc(100vw - 32px)); }
+.keep-grid { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 10px; }
+.keep-grid .card.dropped { filter: brightness(.4) grayscale(.8); }
+.keep-grid .card.dropped:hover { filter: brightness(.65) grayscale(.5); }
+.keep-count { font: 600 14px var(--mono); color: var(--gold) !important; margin: 0 0 12px !important; }
+#modal .reward { display: flex; justify-content: center; margin: -6px 0 20px; pointer-events: none; }
+#modal .reward .card { border-color: var(--gold); }
+
+/* Darkness: never seen is black; seen before but out of sight is remembered, dim and colourless. */
+.tile.fog { filter: brightness(.42) saturate(.5); }
+.tile.unseen { background: #050504 !important; box-shadow: none !important; filter: none; }
+.tile.unseen > * { visibility: hidden; }
+.tile.unseen::before { display: none; }
+.tile.unseen:not(.reach)::after { display: none; }
+
+/* Office furniture, searchable from the next tile. Desks: wood-effect top with a monitor; cabinets: steel drawers. */
+.tile.desk::before { content: ''; position: absolute; inset: 6px 4px; border-radius: 1px; background: #5a4a38; box-shadow: inset 0 0 0 1px #3a2f23, 0 2px 0 rgba(0,0,0,.5); }
+.tile.desk::after { content: ''; position: absolute; left: 14px; top: 10px; width: 18px; height: 12px; border-radius: 1px; background: #4f6b62; box-shadow: 0 0 0 2px #1d1b18, 0 0 6px rgba(111,154,139,.45); right: auto; bottom: auto; }
+.tile.desk.searched::after { background: #1f2422; box-shadow: 0 0 0 2px #1d1b18; }
+.tile.cabinet::before { content: ''; position: absolute; inset: 4px 8px; border-radius: 1px; background: repeating-linear-gradient(#6b6e70 0 8px, #4a4c4e 8px 10px); box-shadow: inset 0 0 0 1px #3a3c3e, 0 2px 0 rgba(0,0,0,.5); }
+.tile.cabinet.searched::before { background: repeating-linear-gradient(#6b6e70 0 8px, #4a4c4e 8px 10px), #6b6e70; transform: translateY(3px); }
+.tile.desk, .tile.cabinet { cursor: zoom-in; }
+
+/* What you read when you search. */
+.doc { text-align: left; max-width: 46ch; margin: 0 auto 18px; padding: 14px 16px; border-radius: 1px; font: 13px/1.55 var(--mono); }
+.doc p { margin: 8px 0 0; color: inherit; }
+.doc-head { font-weight: 600; padding-bottom: 8px; border-bottom: 1px solid currentColor; }
+.doc.mail { background: #101512; color: #9fc0b3; border: 1px solid #2c3a34; }
+.doc.paper { background: #d8cfb9; color: #2a251e; font-family: var(--type); }
+
+/* Bodies: a dark stain and a slumped shape in the enemy's colour; greyed out once searched. A searched body keeps no KEY tag. */
+.corpse { position: absolute; width: var(--T); height: var(--T); z-index: 1; pointer-events: none; }
+.corpse::before { content: ''; position: absolute; inset: 9px 6px 7px 8px; border-radius: 45% 55% 40% 60%; background: radial-gradient(ellipse at 50% 55%, rgba(90,18,14,.85), rgba(60,12,10,0) 70%); }
+.corpse::after { content: ''; position: absolute; left: 12px; top: 17px; width: 22px; height: 10px; border-radius: 5px; background: #2a2620; border: 2px solid var(--c); transform: rotate(-24deg); opacity: .9; }
+.corpse.searched::after { border-color: #5a5348; opacity: .6; }
+.corpse.haskey:not(.searched)::before { box-shadow: 0 0 0 2px var(--gold); }
+
+/* Keycard door: heavy steel with a card reader; red light until you hold a keycard, then green. */
+#board .tile.keydoor { background: linear-gradient(90deg, #2e2b27 0 4px, #55504a 4px calc(100% - 4px), #2e2b27 calc(100% - 4px)); box-shadow: inset 0 0 0 1px #1d1b18; cursor: pointer; }
+.tile.keydoor::before { content: ''; position: absolute; left: 50%; top: 50%; width: 12px; height: 16px; margin: -8px 0 0 -6px; border-radius: 1px; background: #1d1b18; box-shadow: inset 0 0 0 1px #6b6253; }
+.tile.keydoor::after { content: ''; position: absolute; left: 50%; top: 50%; width: 6px; height: 4px; margin: -5px 0 0 -3px; right: auto; bottom: auto; border-radius: 1px; background: #c0392b; box-shadow: 0 0 6px #c0392b; }
+.tile.keydoor.unlockable::after { background: #7fbf5a; box-shadow: 0 0 6px #7fbf5a; }
+
+/* Floor plan: rooms you haven't been in yet show as a dim blueprint, without what's inside. */
+.tile.planned { filter: brightness(.3) grayscale(1); }
+.tile.planned > * { visibility: hidden; }
+.tile.planned::before, .tile.planned:not(.reach)::after { display: none; }
+/* Wall safe: heavy steel box with a dial; a crack of light once it's open. */
+.tile.safe::before { content: ''; position: absolute; inset: 7px; border-radius: 2px; background: linear-gradient(#5d6066, #3a3c40); box-shadow: inset 0 0 0 2px #2a2c30, 0 2px 0 rgba(0,0,0,.5); }
+.tile.safe::after { content: ''; position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; right: auto; bottom: auto; border-radius: 50%; background: radial-gradient(circle, #c9a24a 0 25%, #8a8172 30% 60%, #3a3c40 65%); }
+.tile.safe.searched::before { background: linear-gradient(90deg, #3a3c40 0 70%, #c9a24a 70% 74%, #1d1b18 74%); }
+.tile.safe { cursor: pointer; }
+/* Keypad door: steel door with an amber keypad. */
+#board .tile.codedoor { background: linear-gradient(90deg, #2e2b27 0 4px, #5a554d 4px calc(100% - 4px), #2e2b27 calc(100% - 4px)); box-shadow: inset 0 0 0 1px #1d1b18; cursor: pointer; }
+.tile.codedoor::before { content: ''; position: absolute; left: 50%; top: 50%; width: 14px; height: 16px; margin: -8px 0 0 -7px; border-radius: 1px; background: repeating-linear-gradient(90deg, #c9a24a 0 3px, #1d1b18 3px 5px); box-shadow: 0 0 0 2px #1d1b18; opacity: .9; }
+.keypad { display: block; margin: 0 auto 14px; width: 9ch; padding: 8px 10px; font: 600 22px var(--mono); letter-spacing: 6px; text-align: center; background: #0e0d0b; color: var(--gold); border: 1px solid #4a4339; border-radius: 2px; }
+.keypad.wrong { animation: shake .3s; border-color: var(--red); }
+.known-codes { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 16px; }
+.keypad-hint { font-size: 12px; }
+
+/* Vending machine: a tall lit box against the wall. */
+.tile.vending::before { content: ''; position: absolute; inset: 4px 9px; border-radius: 2px; background: linear-gradient(#2a3b40 0 60%, #1d1b18 60% 66%, #3d3a35 66%); box-shadow: inset 0 0 0 2px #4a4f52, 0 0 8px rgba(111,154,139,.35), 0 2px 0 rgba(0,0,0,.5); }
+.tile.vending { cursor: pointer; }
+.shop { display: flex; flex-direction: column; gap: 8px; align-items: stretch; max-width: 280px; margin: 0 auto 16px; }
+
+/* ---------- Stealth: noise, cameras, alarm ---------- */
+.noise { position: absolute; transform: translate(-50%, -50%) scale(0.2); border: 2px solid rgba(214, 196, 150, 0.55); border-radius: 50%;
+  pointer-events: none; z-index: 6; animation: noise 0.7s ease-out forwards; }
+@keyframes noise { to { transform: translate(-50%, -50%) scale(1); opacity: 0; } }
+.unit.camera .token { border-radius: 4px; transform: scale(0.72); background: #1a1916; }
+.unit.camera .token b { font-size: 15px; }
+.intent .sus { color: var(--gold); font-style: italic; }
+.alarm { display: inline-flex; gap: 3px; }
+.alarm i { width: 12px; height: 8px; background: #0e0d0b; border: 1px solid var(--line); }
+.alarm i.on { background: var(--red, #b5563a); border-color: var(--red, #b5563a); }
+
+/* ---------- Floor 4: Meatology. Candlelit, wet. Floor 5: the Head. Cold server halls, old stone underneath. ---------- */
+.theme-flesh .floor { background: radial-gradient(circle at 30% 60%, #2a1614 0 12%, transparent 13%), #211715; box-shadow: inset 0 0 0 1px #1a1110; }
+.theme-flesh .floor.alt { background: #241917; }
+.theme-flesh .wall { background: linear-gradient(#5e4a44 0 5px, #4a3733 5px); box-shadow: inset 0 0 0 1px #2e211e; }
+/* Blood fonts: stone basins, dark red, a candle at the rim. */
+.theme-flesh .prop::before { content: ''; position: absolute; inset: 7px; border-radius: 50%; background: radial-gradient(circle at 50% 50%, #5a0f0c 0 45%, #6e625a 46%); box-shadow: 0 2px 0 rgba(0,0,0,.6); }
+.theme-flesh .prop::after { content: ''; position: absolute; right: 6px; top: 5px; width: 4px; height: 4px; border-radius: 50%; background: #e8c070; box-shadow: 0 0 6px 2px rgba(232,170,80,.55); }
+.theme-head .floor { background: repeating-linear-gradient(45deg, #1b1d1f 0 2px, #191a1c 2px 8px); box-shadow: inset 0 0 0 1px #141516; }
+.theme-head .floor.alt { background: #1c1e20; }
+.theme-head .wall { background: linear-gradient(#6a665e 0 5px, #4f4b45 5px); box-shadow: inset 0 0 0 1px #2c2a27; }
+/* Memory racks: black cabinets, a column of pale status lights. */
+.theme-head .prop::before { content: ''; position: absolute; inset: 4px 9px; border-radius: 1px; background: repeating-linear-gradient(#141414 0 5px, #202020 5px 7px); box-shadow: inset 0 0 0 1px #3a3a3a, 0 2px 0 rgba(0,0,0,.6); }
+.theme-head .prop::after { content: ''; position: absolute; left: 13px; top: 8px; width: 2px; height: 28px; background: repeating-linear-gradient(#b8b09a 0 2px, transparent 2px 6px); opacity: .7; }
+
+/* The document that matters on each floor: a faint ochre rim on its desk or cabinet. */
+.tile.story { box-shadow: inset 0 0 0 2px rgba(201,162,74,.55); }
+.doc.story { border: 1px solid var(--gold); box-shadow: 0 0 0 3px rgba(201,162,74,.15); }
+
+/* The lift, the title, the ending. */
+.lift { text-align: left; max-width: 640px; margin: 0 auto; }
+.lift-story { font: 15px/1.6 var(--type); color: #cfc6b4 !important; }
+.doc.ai { max-width: none; }
+.ai-resp { color: #c9a24a !important; }
+.ai-stats { font-size: 12px; color: var(--muted) !important; }
+.offers { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-bottom: 6px; }
+.offers .card { border-color: var(--gold); }
+.offers .card:hover { transform: translateY(-4px); box-shadow: 0 0 0 2px var(--gold), 0 8px 18px rgba(0,0,0,.6); }
+.offers .supply .big { font-size: 15px; padding: 0 8px; text-align: center; }
+.epitaph { font: italic 15px var(--type); color: #a89f8e !important; }
+.ending { font: 16px/1.7 var(--type); color: #d9d2c3 !important; max-width: 56ch; margin: 0 auto 20px !important; text-align: left; }
+.title { max-width: 60ch; margin: 0 auto; text-align: left; }
+.epigraph { font: italic 15px/1.7 var(--type); color: var(--muted) !important; text-align: center; }
+.premise { line-height: 1.6; }
+.echoes { border-top: 1px solid var(--line); padding-top: 10px; margin-bottom: 16px; font-size: 13px; color: #bdb5a6; }
+.echoes b { display: block; color: var(--gold); margin-bottom: 4px; }
+
+/* Gear and implant offers: dossier cards rather than playing cards. */
+.card.item { background: #2a2620; color: var(--ink); border-color: var(--gold); }
+.card.item .half { padding: 8px 10px; text-align: left; background: none; border: 0; align-items: stretch; justify-content: flex-start; }
+.card.item .kind { font: 600 10px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--gold); margin-bottom: 4px; }
+.card.item p { font-size: 11px; line-height: 1.35; margin: 0; color: #cfc6b4; }
+.card.item .sub { font-size: 10px; color: var(--muted); margin-top: 4px; }
+.card.item .name { background: #1d1a16; color: var(--ink); }
+.card.implant { border-color: #8a4a3e; }
+.card.implant .kind { color: #c77a62; }
+.offers .card { height: 170px; }
+.panel.loadout .row span { color: var(--muted); }
+.lost { color: var(--red); }
+
+/* Terminals: a desk with a bigger, greener screen. Vent grates: slats set into the wall. */
+.tile.terminal::before { content: ''; position: absolute; inset: 5px 4px; border-radius: 1px; background: #3d3a35; box-shadow: inset 0 0 0 1px #24221e, 0 2px 0 rgba(0,0,0,.5); }
+.tile.terminal::after { content: ''; position: absolute; left: 10px; top: 9px; width: 26px; height: 18px; border-radius: 1px; background: repeating-linear-gradient(#5f8f6f 0 2px, #3f6b52 2px 4px); box-shadow: 0 0 0 2px #151412, 0 0 8px rgba(111,154,139,.4); }
+.tile.terminal { cursor: pointer; }
+.tile.grate::after { content: ''; position: absolute; inset: 11px 9px; border-radius: 1px; background: repeating-linear-gradient(90deg, #1a1916 0 3px, #77736a 3px 5px); box-shadow: 0 0 0 2px #2c2a26; }
+.tile.grate { cursor: pointer; }
+.energy { display: inline-flex; gap: 3px; }
+.energy i { width: 12px; height: 8px; background: #0e0d0b; border: 1px solid var(--line); }
+.energy i.on { background: var(--blue); border-color: var(--blue); }
+.terminal-menu { display: flex; flex-direction: column; gap: 6px; max-width: 460px; margin: 0 auto 16px; text-align: left; }
+.terminal-menu .hack { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; text-align: left; background: #101512; color: #9fc0b3; border-color: #2c3a34; }
+.terminal-menu .hack span { color: var(--gold); font-size: 12px; }
+.terminal-menu .hack small { grid-column: 1 / -1; color: #7f978d; font-size: 11px; }
+.terminal-menu .hack:disabled { opacity: .45; cursor: default; }
+.mini-btn.aiming { background: var(--red); color: #fff; border-color: var(--red); }
+
+/* Liquids sit under everything; fire flickers over the floor and whoever stands in it. */
+.puddle { position: absolute; width: var(--T); height: var(--T); z-index: 0; pointer-events: none; }
+.puddle::before { content: ''; position: absolute; inset: 7px 5px 6px 6px; border-radius: 48% 52% 40% 60% / 55% 45% 55% 45%; opacity: .8; }
+.puddle.blood::before { background: radial-gradient(ellipse at 45% 50%, #5e1310 0 55%, rgba(70,14,12,.4) 70%, transparent 72%); }
+.puddle.oil::before { background: radial-gradient(ellipse at 45% 50%, #14161a 0 50%, rgba(60,70,90,.35) 62%, transparent 72%); box-shadow: inset 0 0 6px rgba(120,110,160,.25); }
+.puddle.chem::before { background: radial-gradient(ellipse at 45% 50%, rgba(140,230,90,.55) 0 45%, rgba(60,140,50,.3) 62%, transparent 72%); }
+.fire { position: absolute; width: var(--T); height: var(--T); z-index: 3; pointer-events: none;
+  background: radial-gradient(ellipse at 50% 70%, rgba(255,210,120,.85), rgba(230,110,40,.55) 40%, rgba(150,40,20,0) 70%);
+  animation: flicker .35s infinite alternate; mix-blend-mode: screen; }
+@keyframes flicker { from { opacity: .75; transform: scaleY(.92); } to { opacity: 1; transform: scaleY(1.06); } }
+.unit.civilian .token { transform: scale(.82); filter: saturate(.6); }
+
+/* Backrooms: damp yellow carpet under a buzzing light. */
+.tile.floor.backroom { background: repeating-linear-gradient(45deg, #4a4328 0 3px, #463f25 3px 6px) !important; box-shadow: inset 0 0 0 1px #3a3420 !important; }
+/* A sniper's line of fire. */
+.tile.aim::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(-45deg, rgba(181,80,58,.45) 0 4px, transparent 4px 9px); box-shadow: inset 0 0 0 1px rgba(181,80,58,.7); pointer-events: none; }
+.howto p { text-align: left; line-height: 1.55; }
+
+.token svg { width: 20px; height: 20px; display: block; }
+.unit.player .token svg { color: #f1ead9; }
+
+/* Ritual rooms: a blood circle around a stone altar with candles. */
+.tile.floor.circle { background: radial-gradient(circle at 50% 50%, #4a1612 0 30%, #2a1715 60%) !important; }
+.tile.altar::before { content: ''; position: absolute; inset: 7px 5px; border-radius: 2px; background: linear-gradient(#77706a, #4f4944); box-shadow: inset 0 -6px 0 #5a120e, 0 2px 0 rgba(0,0,0,.6); }
+.tile.altar::after { content: ''; position: absolute; left: 9px; top: 5px; width: 4px; height: 4px; border-radius: 50%; background: #e8c070; box-shadow: 22px 0 0 #e8c070, 0 0 6px 2px rgba(232,170,80,.55), 22px 0 6px 2px rgba(232,170,80,.55); }
+.tile.altar { cursor: pointer; }
+
+/* Fire stairs, a Bazaar contact at a desk, the dream phone, laser tripwires. */
+.tile.stairs::before { content: ''; position: absolute; inset: 5px 7px; background: repeating-linear-gradient(#5d5a53 0 4px, #33312c 4px 7px); box-shadow: inset 0 0 0 2px #2a2824; }
+.tile.stairs::after { content: 'EXIT'; position: absolute; left: 50%; top: 2px; transform: translateX(-50%); font: 700 8px var(--mono); color: #17130a; background: #6f9a8b; padding: 0 3px; border-radius: 1px; }
+.tile.contact::before { content: ''; position: absolute; inset: 9px 6px 5px; border-radius: 2px; background: #4b4034; box-shadow: inset 0 0 0 1px #2e271f; }
+.tile.contact::after { content: ''; position: absolute; left: 50%; top: 5px; width: 14px; height: 14px; margin-left: -7px; border-radius: 50%; background: #c9a24a; box-shadow: 0 10px 0 2px #8a6f36; }
+.tile.contact.searched::after { background: #7d6a4a; }
+.tile.phone::before { content: ''; position: absolute; inset: 12px 10px; border-radius: 3px; background: #2a2620; box-shadow: inset 0 0 0 2px #77736a; }
+.tile.phone::after { content: ''; position: absolute; left: 50%; top: 9px; width: 22px; height: 7px; margin-left: -11px; border-radius: 4px 4px 1px 1px; background: #b5503a; animation: ring .5s infinite alternate; }
+.tile.phone.searched::after { background: #4a4339; animation: none; }
+@keyframes ring { from { transform: rotate(-8deg); } to { transform: rotate(8deg); } }
+.tile.stairs, .tile.contact, .tile.phone { cursor: pointer; }
+.tile.trip::before { content: ''; position: absolute; left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: #d9503a; box-shadow: 0 0 6px 1px rgba(217,80,58,.7); }
+.ok { color: var(--blue); }
+
+/* God mode is on: the header button says so in red. */
+body.god [data-act="god"] { background: var(--red); color: #fff; border-color: var(--red); }

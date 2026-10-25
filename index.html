@@ -1071,7 +1071,8 @@ function startRound() {
   }
   // A turn: use one card (click it, then click its target) and move (click a blue tile), in any order.
   S.phase = 'turn'; S.sel = null; S.playing = null; S.preview = null; S.hoverDir = null;
-  S.act = { atk: null, move: run.char.move + serumBonus('speed'), atkUsed: false, mvUsed: false };
+  // move = steps left this turn (you can split them over several clicks), steps = steps taken so far.
+  S.act = { atk: null, move: run.char.move + serumBonus('speed'), atkUsed: false, mvUsed: false, steps: 0 };
   // No ready cards left: this turn has to be a rest (no moving, no way out of it).
   S.forcedRest = !S.cards.some(c => !c.used);
   if (S.forcedRest) {
@@ -1097,7 +1098,7 @@ function pickCard(card) {
 // Resting replaces the whole turn, so it's only possible before you've moved or used a card.
 function startRest() {
   const a = S.act;
-  if (S.phase !== 'turn' || S.busy || a.mvUsed || a.atkUsed || !S.cards.some(c => c.used)) return;
+  if (S.phase !== 'turn' || S.busy || a.steps || a.atkUsed || !S.cards.some(c => c.used)) return;
   S.phase = 'burn'; S.sel = null; S.preview = null; S.playing = null; a.atk = null;
   render();
 }
@@ -1121,7 +1122,7 @@ function useSelf() {
   if (s.heal) heal(s.heal);
   if (s.move) {
     const n = cardMove(s);
-    if (a.mvUsed) { a.mvUsed = false; a.move = n; } else a.move += n;
+    a.move = Math.max(0, a.move) + n; a.mvUsed = false;
     log(`You get ${n} extra move.`);
   }
   a.atkUsed = true;
@@ -1163,8 +1164,10 @@ async function onTileClick(x, y) {
       return;
     }
     S.busy = true; renderOverlays();
-    await walk(P, pathTo(prev, P.x, P.y, x, y));
-    a.mvUsed = true;
+    const path = pathTo(prev, P.x, P.y, x, y);
+    await walk(P, path);
+    a.move -= path.length; a.steps += path.length;
+    a.mvUsed = a.move <= 0;
     S.busy = false;
     if (P.x === S.exit.x && P.y === S.exit.y) {
       log('You take the lift up.');
@@ -1905,19 +1908,19 @@ function renderBar() {
   const bar = $('#bar');
   if (S.phase === 'turn') {
     const a = S.act, c = S.playing, anyReady = S.cards.some(x => !x.used);
-    const canRest = !a.mvUsed && !a.atkUsed && S.cards.some(x => x.used);
+    const canRest = !a.steps && !a.atkUsed && S.cards.some(x => x.used);
     let hint;
     if (!c) hint = anyReady
       ? `Click a card to use it, and click a blue tile to move (up to ${a.move}).`
       : '<b>All your cards are used.</b> Rest to get them back.';
     else if (!a.atkUsed) hint = (isDirectional(a.atk) ? 'Point toward a target and click a red tile' : 'Click a red target')
       + ` to use <b>${c.name}</b>. Click the card again to put it back.`;
-    else hint = a.mvUsed ? 'Done for this turn. Use a stim or serum if you like, then end your turn.' : 'Click a blue tile to move, or end your turn.';
+    else hint = a.mvUsed ? 'Done for this turn. Use a stim or serum if you like, then end your turn.' : (a.steps ? `You have ${a.move} step${a.move > 1 ? 's' : ''} left. Click a blue tile, or end your turn.` : 'Click a blue tile to move, or end your turn.');
     const bonus = '';
     bar.innerHTML = `
       <div class="hint">${hint}</div>
       <div class="chips">
-        <span class="chip mv ${a.mvUsed ? 'used' : ''}">${a.mvUsed ? '✓ ' : ''}Move ${a.move}</span>
+        <span class="chip mv ${a.mvUsed ? 'used' : ''}">${a.mvUsed ? '✓ Moved' : a.steps ? `Move ${a.move} left` : `Move ${a.move}`}</span>
         <span class="chip ${c ? 'atk' : 'empty'} ${a.atkUsed ? 'used' : ''}">${c ? (a.atkUsed ? '✓ ' : '') + atkLabel(c.action) + bonus : 'No card yet'}</span>
       </div>
       <button data-act="rest" ${canRest ? '' : 'disabled'}>Rest</button>

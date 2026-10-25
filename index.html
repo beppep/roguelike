@@ -327,11 +327,12 @@ const SHARED_CARDS = [
 // You, the operative. strength = damage of the basic Melee Attack card, move = free steps every turn.
 const OPERATIVE = { name: 'Operative', strength: 3, move: 4 };
 
-// Starting deck: 2 Melee Attacks, a silenced pistol, a sprint (3 extra steps) and the shared cards above.
+// Starting deck: 2 Melee Attacks, a silenced pistol, a sprint (a second move: your Move again) and the shared cards above.
+// move: 'base' means as many extra steps as your Move stat; moveBonus adds steps on top.
 const startingDeck = ch => [
   ...[1, 2].map(id => ({ id, name: 'Melee Attack', action: { type: 'melee', dmg: ch.strength, str: true } })),
   { id: 3, name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5 } },
-  { id: 4, name: 'Sprint',          action: { type: 'self', move: 3 } },
+  { id: 4, name: 'Sprint',          action: { type: 'self', move: 'base' } },
   ...SHARED_CARDS,
 ];
 
@@ -343,7 +344,7 @@ const REWARD_CARDS = [
   { id: 14, name: 'Rail Spike',   action: { type: 'shape', shape: 'line', dmg: 3 } },
   { id: 15, name: 'EMP Pulse',    action: { type: 'shape', shape: 'ring', dmg: 0, stun: 1 } },
   { id: 16, name: 'Smart Rifle',  action: { type: 'ranged', dmg: 3, range: 5 } },
-  { id: 17, name: 'Overclock',    action: { type: 'self', move: 4 } },
+  { id: 17, name: 'Overclock',    action: { type: 'self', move: 'base', moveBonus: 2 } },
   { id: 18, name: 'Scattergun',   action: { type: 'shape', shape: 'cone', dmg: 2 } },
   { id: 20, name: 'Taser Dart',   action: { type: 'ranged', dmg: 0, stun: 1, range: 4 } },
   { id: 21, name: 'Nano-Stim',    action: { type: 'self', heal: 4 } },
@@ -803,7 +804,9 @@ function dirTo(x, y) {
   return Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
 }
 
-const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0) + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${s.move}` : '', s.heal ? `Heal ${s.heal}` : '']
+// Steps a move card gives: your Move stat for 'base', plus any bonus.
+const cardMove = s => (s.move === 'base' ? (run ? run.char.move : OPERATIVE.move) : s.move || 0) + (s.moveBonus || 0);
+const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0) + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '']
   .filter(Boolean).join(' + ');
 const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}`;
 
@@ -1117,8 +1120,9 @@ function useSelf() {
   const a = S.act, s = a.atk;
   if (s.heal) heal(s.heal);
   if (s.move) {
-    if (a.mvUsed) { a.mvUsed = false; a.move = s.move; } else a.move += s.move;
-    log(`You get ${s.move} extra move.`);
+    const n = cardMove(s);
+    if (a.mvUsed) { a.mvUsed = false; a.move = n; } else a.move += n;
+    log(`You get ${n} extra move.`);
   }
   a.atkUsed = true;
   nextAction();
@@ -1947,7 +1951,7 @@ function diagram(s) {
 function actionHTML(s) {
   if (s.type === 'self') {
     return (s.heal ? `<div class="big heal">Heal ${s.heal}</div>` : '') +
-      (s.move ? `<div class="big dash">Move +${s.move}</div>` : '') + '<div class="sub">Self</div>';
+      (s.move ? `<div class="big dash">Move +${cardMove(s)}</div>` : '') + '<div class="sub">Self</div>';
   }
   const sub = s.pick ? 'Opens a door, quietly'
     : s.steal ? 'Rob someone unaware' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Ranged · clear shot' : SHAPE_NAMES[s.shape];

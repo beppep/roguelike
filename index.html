@@ -558,8 +558,9 @@ function generateFloor(f) {
     for (const [x, y] of openings(exitRoom)) g[y][x] = 'L';
     const deadEnds = rooms.filter(r => r !== exitRoom && openings(r).length === 1);
     for (let i = 0; i < 2 && deadEnds.length; i++) {
-      const [x, y] = openings(deadEnds.splice(Math.floor(rng() * deadEnds.length), 1)[0])[0];
-      g[y][x] = 'L';
+      // (its one doorway may already be a keycard door, if it opens into the lift room)
+      const o = openings(deadEnds.splice(Math.floor(rng() * deadEnds.length), 1)[0])[0];
+      if (o) g[o[1]][o[0]] = 'L';
     }
   }
   // One room per floor gets keypad doors on all its ways in; the code is written down somewhere on the floor.
@@ -622,7 +623,7 @@ function generateFloor(f) {
     if (g[y][x] !== '.') return null;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const c = g[y + dy][x + dx];
-      if (c === '+' || ((dx || dy) && c === '.' && (y + dy < r.y || y + dy >= r.y + r.h || x + dx < r.x || x + dx >= r.x + r.w))) return null;
+      if ('+LC'.includes(c) || ((dx || dy) && c === '.' && (y + dy < r.y || y + dy >= r.y + r.h || x + dx < r.x || x + dx >= r.x + r.w))) return null;
     }
     return [x, y];
   };
@@ -890,6 +891,9 @@ function areaName(x, y) {
   return ns && ew ? `${ns}-${ew}` : ns || ew || 'middle';
 }
 
+// Furniture you can actually stand next to (some get boxed in by other furniture).
+const standable = k => { const [x, y] = unkey(k); return DIRS.some(([dx, dy]) => !S.walls[y + dy][x + dx]); };
+
 function hideClues() {
   const clues = [];
   for (const [k, f] of S.furn) if (f.kind === 'safe') {
@@ -908,7 +912,7 @@ function hideClues() {
   clues.push({ kind: 'plan',
     mail: { from: 'Facilities', subject: 'Updated floor plan', body: 'Attached: the current floor plan for this level, including the new partitions. (The floor plan is now on your map.)' },
     note: { title: 'Fire evacuation plan', body: 'A laminated plan of the whole floor, every room and door marked in red. (The floor plan is now on your map.)' } });
-  const spots = [...S.furn.values()].filter(f => f.kind !== 'safe').sort(() => Math.random() - 0.5);
+  const spots = [...S.furn].filter(([k, f]) => f.kind !== 'safe' && standable(k)).map(([, f]) => f).sort(() => Math.random() - 0.5);
   clues.forEach((c, i) => {
     const f = spots[i];
     if (!f) return;

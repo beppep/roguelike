@@ -528,3 +528,4 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 .tile.range-hack::after { background: rgba(80,140,220,.12); }
 .tile.target-hack { cursor: crosshair; }
 .tile.target-hack::after { background: rgba(80,140,220,.32); box-shadow: inset 0 0 0 2px #5b8fd6; }
+.big.hack { color: #2f5f9e; }

@@ -486,3 +486,36 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 /* A gun's pattern (Scattergun, Rail Gun) stays on the card in the hand, small. */
 #hand .card .diag.gun { display: grid; grid-template-columns: repeat(5, 5px); gap: 1px; margin-top: 2px; }
 #hand .card .diag.gun i { width: 5px; height: 5px; }
+
+/* The character screen. */
+.sheet-btn { width: 100%; margin-bottom: 10px; }
+#modal .box.sheet-box { max-width: min(1080px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow-y: auto; text-align: left; }
+.sheet { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 18px; margin-bottom: 14px; }
+.sheet section { min-width: 0; }
+.sheet-stats { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px 22px; border-bottom: 1px solid var(--line); padding-bottom: 10px; }
+.sheet-stats .stat span { color: var(--muted); margin-right: 6px; }
+.sheet h3.sec { font: 600 11px var(--mono); letter-spacing: 1px; text-transform: uppercase; color: var(--gold); margin: 0 0 6px; }
+.sheet h3.sec:not(:first-child) { margin-top: 12px; }
+.sheet-card { background: #1d1a16; border: 1px solid var(--line); padding: 10px 12px; }
+.sheet-card h3 { margin: 0 0 4px; font: 400 18px var(--type); }
+.sheet-card p { margin: 0 0 8px !important; font-size: 12px; color: #bdb5a6; }
+.sheet .small { font-size: 11px !important; color: var(--muted) !important; }
+.gun-stats .row span { color: var(--muted); }
+.sheet .diag { margin: 6px 0 8px; }
+.sheet .diag i { background: rgba(217,210,195,.1); }
+.sheet .diag i.me { background: var(--ink); }
+.sheet .diag i.hit { background: var(--red); }
+.sheet-body .panel.body { background: none; border: 0; padding: 0; }
+.sheet-body .panel.body .parts, .sheet-body .panel.body .row.stats { display: none; }
+.sheet-body .figure { width: 120px; margin: 0 auto 6px; display: block; }
+.part-row { display: grid; grid-template-columns: 74px 1fr; gap: 8px; font-size: 12px; padding: 3px 0; border-bottom: 1px solid #24211d; color: #cfc6b4; }
+.part-row b { color: var(--ink); font-weight: 600; }
+.part-row.empty b { color: var(--muted); font-weight: 400; }
+.sheet .muted { color: #5a5348; }
+.sheet-deck { grid-column: 1 / -1; }
+.deck-grid { display: flex; flex-wrap: wrap; gap: 8px; }
+.deck-grid .card { width: 112px; height: 150px; cursor: default; }
+.deck-grid .card:hover { transform: none; }
+.deck-grid .card .sub, .deck-grid .card .diag { display: none; }
+.deck-grid .card .big { font-size: 13px; }
+@media (max-width: 860px) { .sheet { grid-template-columns: 1fr; } }

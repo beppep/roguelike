@@ -2547,6 +2547,57 @@ function bodyHTML() {
   </div>`;
 }
 
+// ---------- Character screen ----------
+// Everything about you in one place: stats, your gun in detail, your body and implants, gear, items and the deck.
+function gunSheetHTML() {
+  const id = run.gun, g = GUNS[id], a = gunAction(id), m = gunMods(id);
+  const rows = [
+    ['Damage', a.dmg ? a.dmg : '—'],
+    a.stun ? ['Sleep', `${a.stun} turn${a.stun > 1 ? 's' : ''}`] : null,
+    ['Reach', a.type === 'ranged' ? `Range ${a.range} (needs a clear line)` : SHAPE_NAMES[a.shape]],
+    ['Noise', a.silent ? 'Quiet' : `Loud: heard ${NOISE.gun} tiles away`],
+    ['To hit', a.miss ? `${Math.round(100 - a.miss * 100)}%` : '100%'],
+    ['Mods', `${m} / ${GUN_MOD_MAX}`],
+  ].filter(Boolean);
+  return `<div class="sheet-card gun-card"><h3>${gunName(id)}</h3><p>${g.text}${hasImplant('optic') && a.range ? ' (+2 range from your Targeting Optic.)' : ''}</p>
+    <div class="gun-stats">${rows.map(([k, v]) => `<div class="row"><span>${k}</span><b>${v}</b></div>`).join('')}</div>
+    ${a.type === 'shape' ? diagram({ ...a, gun: false }) : ''}
+    <p class="small">Every Shoot half fires this gun. Swapping for another gun leaves this one on the floor, mods and all.</p></div>`;
+}
+
+function showSheet() {
+  if (!S || !run) return;
+  const P = S.player;
+  const defectIn = part => run.defects.find(x => DEFECTS[x].part === part);
+  const stats = [
+    ['HP', `${Math.max(0, P.hp)} / ${P.max}`], ['Strength', run.char.strength + strBonus()], ['Move', moveStat()], ['Creds', '¥' + fmtMove(run.creds)],
+    ['Floor', `${S.room + 1} / ${FLOORS.length}, ${FLOORS[S.room].name}`], ['Alarm', `${S.alarm} / ${ALARM_MAX}`],
+  ];
+  const parts = BODY_PARTS.map(p => {
+    const i = implantIn(p.id), d = defectIn(p.id);
+    return `<div class="part-row ${i ? '' : 'empty'}"><b>${p.name}</b><div>${i ? `<i>${IMPLANTS[i].name}.</i> ${IMPLANTS[i].text}` : '<span class="muted">Empty.</span>'}${d ? `<div class="lost">Defect: ${DEFECTS[d].name}. ${DEFECTS[d].text}</div>` : ''}</div></div>`;
+  }).join('');
+  const gear = GEAR_SLOTS.map(sl => `<div class="part-row ${run.gear[sl] ? '' : 'empty'}"><b>${sl}</b><div>${run.gear[sl] ? `<i>${GEAR[run.gear[sl]].name}.</i> ${GEAR[run.gear[sl]].text}` : '<span class="muted">Nothing.</span>'}</div></div>`).join('');
+  const items = [
+    run.stims ? `<div class="part-row"><b>Healing stim ×${run.stims}</b><div>Heals 1 HP a turn for ${STIM_TURNS} turns.</div></div>` : '',
+    ...Object.entries(SERUMS).map(([k, sv]) => run[k] ? `<div class="part-row"><b>${sv.name} ×${run[k]}</b><div>+${sv.bonus} ${sv.desc} for ${sv.turns} turns.</div></div>` : ''),
+    ...Object.entries(run.items).filter(([, n]) => n > 0).map(([id, n]) => `<div class="part-row"><b>${GADGETS[id].name} ×${n}</b><div>${GADGETS[id].text}</div></div>`),
+  ].join('') || '<p class="muted">You carry nothing.</p>';
+  const extras = [
+    S.disguise ? `Wearing a ${S.disguise}.` : '', S.needKey ? (S.hasKey ? 'You have the keycard.' : 'You need a keycard for the lift.') : '',
+    ...S.codes.map(c => `Code: ${c.label}, ${c.code}.`),
+    ...echoes.map(id => ECHO_FLAVOUR[id] ? `Echo: <i>${ECHO_FLAVOUR[id].name}.</i> ${ECHO_FLAVOUR[id].text}` : ''),
+  ].filter(Boolean);
+  showModal('Character', '', [['closeread', 'Close']], `<div class="sheet">
+    <section class="sheet-stats">${stats.map(([k, v]) => `<div class="stat"><span>${k}</span><b>${v}</b></div>`).join('')}</section>
+    <section><h3 class="sec">Gun</h3>${gunSheetHTML()}</section>
+    <section class="sheet-body"><h3 class="sec">Body</h3>${bodyHTML()}<div class="parts-list">${parts}</div></section>
+    <section><h3 class="sec">Gear</h3>${gear}<h3 class="sec">Items</h3>${items}${extras.length ? `<h3 class="sec">Notes</h3>${extras.map(e => `<p class="small">${e}</p>`).join('')}` : ''}</section>
+    <section class="sheet-deck"><h3 class="sec">Deck (${deck.length})</h3><div class="deck-grid">${deck.map(c => `<div class="card">${cardHTML(c)}</div>`).join('')}</div></section>
+  </div>`);
+  $('#modal .box').classList.add('wide', 'sheet-box');
+}
+
 function renderSide() {
   const P = S.player, hp = Math.max(0, P.hp);
   const canUseItem = S.phase === 'turn' && !S.busy;
@@ -2571,10 +2622,7 @@ function renderSide() {
       ${S.disguise ? `<div class="row"><span>Disguise</span><b class="ok">${S.disguise}</b></div>` : ''}
       ${S.needKey ? `<div class="row"><span>Keycard</span><b class="${S.hasKey ? 'ok' : 'lost'}">${S.hasKey ? 'Got it' : 'Needed'}</b></div>` : ''}
     </div>
-    ${bodyHTML()}
-    ${Object.keys(run.gear).length ? `<div class="panel loadout">
-      ${GEAR_SLOTS.filter(sl => run.gear[sl]).map(sl => `<div class="row" title="${GEAR[run.gear[sl]].text}"><span>${sl}</span><b>${GEAR[run.gear[sl]].name}</b></div>`).join('')}
-    </div>` : ''}
+    <button class="sheet-btn" data-act="sheet" title="Stats, gun, body, gear, items and deck (I)">Character (I)</button>
     ${S.log.length ? `<div class="panel log">${S.log.slice(-10).map(l => `<div>${l}</div>`).join('')}</div>` : ''}`;
   drawMinimap();
 }
@@ -2767,6 +2815,7 @@ document.addEventListener('click', e => {
   else if (act === 'overdrive') overdrive();
   else if (act === 'sound') toggleSound();
   else if (act === 'center') centerCamera();
+  else if (act === 'sheet') showSheet();
   else if (act === 'takegun') takeGun();
   else if (act === 'god') toggleGod();
   else if (act === 'howto') showHowTo();
@@ -2788,7 +2837,12 @@ document.addEventListener('click', e => {
   else if (act === 'newrun') { $('#modal').hidden = true; newRun(); }
 });
 
-document.addEventListener('keydown', e => { if ((e.key === 'c' || e.key === 'C') && e.target.tagName !== 'INPUT' && S) centerCamera(); });
+document.addEventListener('keydown', e => {
+  if (e.target.tagName === 'INPUT' || !S) return;
+  if (e.key === 'c' || e.key === 'C') centerCamera();
+  if (e.key === 'i' || e.key === 'I') { const m = $('#modal'); if (!m.hidden && m.querySelector('.sheet')) m.hidden = true; else if (m.hidden) showSheet(); }
+  if (e.key === 'Escape' && !$('#modal').hidden && $('#modal').querySelector('.sheet')) $('#modal').hidden = true;
+});
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'keypad') enterCode(); });
 
 newRun();

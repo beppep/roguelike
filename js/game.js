@@ -2696,7 +2696,9 @@ function actionHTML(s) {
   const sub = s.type === 'hack' ? 'Terminal or keypad next to you, or a camera in sight' : s.bribe ? 'Someone unaware next to you' : s.ignite ? 'Fire. Oil and chemicals spread it' : s.type === 'point' ? (s.price ? 'Lands where you can see; people go to look' : 'A sound anywhere you can see') : s.push ? 'Into walls: 2 damage' : s.breach ? 'Blow a hole in a wall. Very loud'
     : s.cost ? `Costs ${s.cost} HP` : s.pick ? 'Opens a door, quietly'
     : s.steal ? 'Rob someone unaware' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Ranged · clear shot' : SHAPE_NAMES[s.shape];
-  return `<div class="big${s.type === 'hack' ? ' hack' : ''}">${atkName(s)}</div><div class="sub">${sub}</div>` +
+  // Tools are blue (hack, lockpick, steal, bribe, coin toss, breach); attacks and stuns are red.
+  const tool = s.type === 'hack' || s.pick || s.steal || s.bribe || s.noise || s.breach;
+  return `<div class="big${tool ? ' hack' : ''}">${atkName(s)}</div><div class="sub">${sub}</div>` +
     (s.type === 'ranged' || s.type === 'point' ? `<div class="rangeicon">⌖ ${s.range}</div>` : s.type === 'melee' || s.type === 'hack' ? '' : diagram(s));
 }
 

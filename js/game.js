@@ -25,6 +25,15 @@ const hasDefect = id => !!run && run.defects.includes(id);
 // Free steps per turn: the operative's Move, plus gear, minus defects.
 // Steps a move card gives: your Move stat for 'base', plus any bonus.
 const cardMove = s => (s.move === 'base' ? (run ? moveStat() : OPERATIVE.move) : s.move || 0) + (s.moveBonus || 0);
+// Max HP for this run: the run's own (Transfusions add, altars take) plus the Second Heart.
+const maxHpStat = () => run.maxHp + (hasImplant('heart') ? SECOND_HEART_HP : 0);
+// After max HP changes mid-floor: a gain also heals by the same amount, a loss caps your HP.
+function syncMaxHp() {
+  if (!S || !S.player) return;
+  const P = S.player, before = P.max;
+  P.max = maxHpStat();
+  P.hp = Math.max(1, Math.min(P.max, P.hp + Math.max(0, P.max - before)));
+}
 const moveStat = () => run.char.move + (hasGear('runners') ? 1 : 0) - (hasDefect('spinal') ? 1 : 0);
 const nameOf = u => u.id === 'p' ? 'You' : ENEMY_TYPES[u.kind].name;
 
@@ -391,8 +400,8 @@ function searchFurniture(x, y) {
     if (f.used) return toast('The altar is sated.');
     const left = Object.keys(IMPLANTS).filter(id => !hasImplant(id)).length;
     S.altar = f;
-    return showModal('Altar', `Old stone, newer stains. A brass plate: <i>WHAT IS OWED IS PAID.</i> Offer ${ALTAR_PRICE} HP of blood and something will grow in you: a random implant, in whatever part of you it chooses.${implantWarn()}`,
-      left && S.player.hp > ALTAR_PRICE ? [['offer', 'Offer blood'], ['closeread', 'Step back']] : [['closeread', 'Step back']]);
+    return showModal('Altar', `Old stone, newer stains. A brass plate: <i>WHAT IS OWED IS PAID.</i> Give up ${ALTAR_MAX_HP} of your max HP, for good, and something will grow in you: a random implant, in whatever part of you it chooses.${implantWarn()}`,
+      left && run.maxHp > ALTAR_MAX_HP + 2 ? [['offer', 'Offer blood'], ['closeread', 'Step back']] : [['closeread', 'Step back']]);
   }
   let html;
   const mail = e => `<div class="doc mail"><div class="doc-head">From: ${e.from}<br>Subject: ${e.subject}</div><p>${e.body}</p></div>`;
@@ -791,7 +800,7 @@ function floorMap(idx) {
 
 // Start of a run: fresh deck and loot, then floor 1.
 function newRun() {
-  run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: START_CREDS, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gun: START_GUN, mods: {},
+  run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: START_CREDS, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gun: START_GUN, mods: {}, maxHp: MAX_HP,
     seed: Math.floor(Math.random() * 1e6), maps: [], adapt: null, story: [], floorStats: [],
     gear: {}, implants: [], defects: [], notes: [], items: {} };
   godCreds();
@@ -816,7 +825,7 @@ function loadRoom(idx) {
   const doorCode = randomCode();
   rows.forEach((row, y) => {
     S.walls.push([...row].map((c, x) => {
-      if (c === 'P') S.player = { id: 'p', x, y, hp: MAX_HP, max: MAX_HP };
+      if (c === 'P') S.player = { id: 'p', x, y, hp: maxHpStat(), max: maxHpStat() };
       else if (c === 'X') S.exit = { x, y };
       else if (c === '+') S.doors.set(key(x, y), DOOR_HP_BY_FLOOR[idx] || DOOR_HP_BY_FLOOR[DOOR_HP_BY_FLOOR.length - 1]);
       else if (c === 'L') S.keyDoors.add(key(x, y));
@@ -2028,6 +2037,7 @@ function liftOffers() {
     { kind: 'creds', n: 30, name: 'Envelope', text: '¥30 in creds' },
     { kind: 'serums', name: 'Lab samples', text: 'A speed and a strength serum' },
     { kind: 'belt', name: 'Grenade belt', text: 'EMP, flashbang and a noise maker' },
+    { kind: 'transfusion', name: 'Transfusion', text: `+${TRANSFUSION_HP} max HP for the run` },
   ];
   while (cards.length < 3) cards.push(supplies.splice(Math.floor(Math.random() * supplies.length), 1)[0]);
   return cards;
@@ -2074,6 +2084,7 @@ function takeOffer(i) {
   else if (o.kind === 'stims') run.stims += o.n;
   else if (o.kind === 'creds') run.creds += o.n;
   else if (o.kind === 'serums') { run.speed++; run.strength++; }
+  else if (o.kind === 'transfusion') { run.maxHp += TRANSFUSION_HP; run.notes.push(`A transfusion in the lift: max HP +${TRANSFUSION_HP}.`); }
   else if (o.kind === 'belt') ['emp', 'flash', 'noise'].forEach(id => { run.items[id] = (run.items[id] || 0) + 1; });
   $('#modal').hidden = true;
   loadRoom(S.room + 1);
@@ -2084,6 +2095,7 @@ function installImplant(id) {
   const old = implantIn(IMPLANTS[id].part), grew = !old;
   if (old) { run.implants = run.implants.filter(x => x !== old); run.notes.push(`You pull the <b>${IMPLANTS[old].name}</b> out of your ${partName(IMPLANTS[id].part)} to make room.`); }
   run.implants.push(id);
+  syncMaxHp();
   run.notes.push(`Installed <b>${IMPLANTS[id].name}</b> in your ${partName(IMPLANTS[id].part)}: ${IMPLANTS[id].text}`);
   if (grew && run.implants.length > IMPLANT_SAFE_COUNT) {
     const pool = Object.keys(DEFECTS).filter(d => !hasDefect(d));
@@ -2105,10 +2117,11 @@ const implantWarn = id => {
 function offerBlood() {
   const f = S.altar, pool = Object.keys(IMPLANTS).filter(id => !hasImplant(id));
   $('#modal').hidden = true;
-  if (!f || f.used || !pool.length || S.player.hp <= ALTAR_PRICE) return;
+  if (!f || f.used || !pool.length || run.maxHp <= ALTAR_MAX_HP + 2) return;
   f.used = true;
-  S.player.hp -= ALTAR_PRICE;
-  floatText(S.player, '-' + ALTAR_PRICE, 'dmg');
+  run.maxHp -= ALTAR_MAX_HP;
+  syncMaxHp();
+  floatText(S.player, `-${ALTAR_MAX_HP} MAX HP`, 'dmg');
   sfx('hurt');
   log('You open your palm over the stone. The candles lean toward you.');
   installImplant(pool[Math.floor(Math.random() * pool.length)]);

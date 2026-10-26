@@ -3,7 +3,9 @@
 
 // ---------- Tuning ----------
 const T = 46;
+// Max HP at the start of a run. It changes over the run: Transfusions and the Second Heart raise it, altars take it.
 const MAX_HP = 10;
+const TRANSFUSION_HP = 2, SECOND_HEART_HP = 3;
 
 // Attack shapes, written facing "up" (y = -1). Rotated to face the chosen direction.
 const SHAPES = {
@@ -228,6 +230,7 @@ const BODY_PARTS = [
   { id: 'eyes',  name: 'Eyes',  x: 50, y: 22 },
   { id: 'skull', name: 'Skull', x: 38, y: 27 },
   { id: 'ears',  name: 'Ears',  x: 63, y: 24 },
+  { id: 'heart', name: 'Heart', x: 42, y: 50 },
   { id: 'spine', name: 'Spine', x: 50, y: 62 },
   { id: 'arms',  name: 'Arms',  x: 76, y: 70 },
   { id: 'skin',  name: 'Skin',  x: 27, y: 74 },
@@ -240,6 +243,7 @@ const IMPLANTS = {
   autophage: { part: 'gut',   name: 'Autophage Gland',      text: 'Searching a body also feeds you from it: heal 3.' },
   spinaltap: { part: 'spine', name: 'Spinal Tap',           text: 'Hack terminals and keypad doors from up to 3 tiles away.' },
   compressed:{ part: 'skull', name: 'Compressed Head',      text: 'In the air ducts every step goes twice as far.' },
+  heart:     { part: 'heart', name: 'Second Heart',         text: `+${SECOND_HEART_HP} max HP.` },
   myomer:    { part: 'arms',  name: 'Myomer Fibres',        text: '+1 Strength: Melee Attack hits 1 harder.' },
   optic:     { part: 'eyes',  name: 'Targeting Optic',      text: 'Guns reach 2 tiles further.' },
   chameleon: { part: 'skin',  name: 'Dermal Chameleon',     text: 'End a turn without moving and nobody who hasn\'t spotted you can see you (except from right next to you) until your next turn.' },
@@ -312,8 +316,8 @@ const ICONS = {
   y: '<path d="M6 2l2.6 5.2C9.6 6.5 10.7 6.2 12 6.2s2.4.3 3.4 1L18 2l.4 7c1 1.3 1.6 2.9 1.6 4.6C20 18 16.4 22 12 22s-8-4-8-8.4c0-1.7.6-3.3 1.6-4.6z"/><circle cx="9.3" cy="13" r="1.4" fill="#15130f"/><circle cx="14.7" cy="13" r="1.4" fill="#15130f"/>',
 };
 
-// Altars (ritual rooms, floors 4-5): pay ALTAR_PRICE HP in blood for a random implant. Each altar takes one offering.
-const ALTAR_PRICE = 3;
+// Altars (ritual rooms, Meatology): give up ALTAR_MAX_HP of your max HP, for good, for a random implant. One offering each.
+const ALTAR_MAX_HP = 2;
 
 // ---------- Disguises ----------
 // Search the body of someone in uniform (guards, enforcers, snipers, cultists) and you can wear their clothes.

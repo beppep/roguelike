@@ -2535,45 +2535,28 @@ function renderHand() {
 }
 
 // ---------- Hover: what is this? ----------
-// One or two short lines about whatever is on the tile under the mouse, and how to use it.
+// Just the name of whatever is on the tile under the mouse (one line per thing), with a word of state where it matters.
 function describeTile(x, y) {
   const k = key(x, y);
   if (!S.seen.has(k) && !S.planned && !S.ductSeen.has(k)) return null;
   const out = [], P = S.player, f = S.furn.get(k), e = enemyAt(x, y);
-  if (S.inDuct && S.ducts.has(k)) out.push(S.grates.has(k) ? 'Vent grate, from the inside. Climb out onto a floor tile next to it.' : 'Air duct. Nobody can see you in here.');
-  if (x === P.x && y === P.y) out.push('You.');
-  if (e && visible(e)) {
-    const t = ENEMY_TYPES[e.kind];
-    const state = isCamera(e) ? (S.camLoop > 0 || e.looped > 0 ? 'looped, seeing nothing' : 'sweeping the room. If it sees you it raises the alarm and radios guards. Hack it to loop it')
-      : e.bribed ? 'bribed: looks the other way' : e.alerted ? (e.fleeing ? 'running' : 'hunting you') : e.suspicious ? 'searching for whatever it heard'
-      : isCivilian(e) ? 'working. Screams if it sees violence or a body' : 'has not seen you. Hits from behind do double damage';
-    out.push(`<b>${t.name}</b> (${e.hp}/${e.max} HP): ${state}.` + (e.hasKey && !S.hasKey ? ' Carries a keycard.' : '') + (!isCamera(e) && !e.alerted && !e.robbed ? ' Can be pickpocketed.' : '') + (canBribe(e) ? ` Takes bribes (¥${BRIBE_PRICE}).` : '') + (t.immune ? ` Immune to ${t.immune.join(', ')}.` : ''));
-  }
-  if (f) out.push({
-    desk: 'Desk with a computer. Click it from next to it to read the screen (sometimes codes or plans).',
-    cabinet: 'Filing cabinet. Click it from next to it to search.',
-    safe: f.opened ? 'An open safe.' : 'Wall safe. Needs a 4-digit code, written down somewhere on this floor.',
-    vending: 'Vending machine. Spend creds on stims, serums and gadgets, or the blinking slot.',
-    terminal: `Networked terminal. Pick a Hack half and click it from next to you: loop cameras, release keycard doors, print the floor plan or pull a fire alarm.${f.firewall ? ' Firewalled: hacks cost 1 HP.' : ''}`,
-    husk: 'Droid husk: a robot that switched itself off. Click it from next to it to read its last log.',
-    altar: f.used ? 'The altar is sated.' : `Altar. Offer ${ALTAR_PRICE} HP of blood for a random implant.`,
-    stairs: 'Fire stairs. Skip the lift: no reward, but the Head loses track of you.',
-    contact: f.used ? 'Your contact. They have nothing more for you.' : 'Someone who might be on your side. Talk from next to them.',
-    phone: f.used ? 'The line is dead.' : 'A phone, ringing. Answer it from next to it.',
-  }[f.kind] + (f.story && !f.searched ? ' <b>Something here matters.</b>' : ''));
-  if (S.grates.has(k) && !S.inDuct) out.push('Vent grate. Step into it from next to it to crawl through the air ducts (1 step).');
-  if (doorAt(x, y)) out.push(`Door (${S.doors.get(k)} HP). Lockpick it quietly, smash it, or wait for someone to open it.`);
-  if (S.keyDoors.has(k)) out.push('Keycard door. Swipe a keycard (from a carrier or their body), release it from a terminal, or short it with a Multitool.');
-  if (S.codeDoors.has(k)) out.push('Keypad door. Enter the code (find it in a desk or cabinet), or Hack it.');
-  if (S.vats.has(k)) out.push(`${S.breakable.name[0].toUpperCase() + S.breakable.name.slice(1)} (${S.vats.get(k)} HP). Smash it to get what's inside.`);
-  if (x === S.exit.x && y === S.exit.y) out.push(S.room === FLOORS.length - 1 ? 'The lift to the Head.' : 'The lift up to the next floor.');
-  if (S.loot.has(k)) out.push('A cache. Walk over it to take it.');
-  if (S.drops.has(k)) out.push('Something on the floor. Walk over it to take it.');
-  if (S.corpses.has(k)) { const c = S.corpses.get(k); out.push(c.searched ? 'A body, searched.' : 'A body. Walk onto it to search it.' + (ENEMY_TYPES[c.kind].uniform && !S.disguise ? ` You could wear their ${ENEMY_TYPES[c.kind].uniform}.` : '')); }
-  if (S.trips.has(k)) out.push('Laser tripwire. Crossing it raises the alarm. An EMP clears it.');
-  if (S.fire.has(k)) out.push('Fire. Burns whoever stands in it.');
-  else if (S.liquids.has(k)) out.push({ blood: 'Blood. Stuns arc through it.', oil: 'Oil. Burns, and gunfire sets it alight.', chem: 'Chemicals. Burn, and gunfire sets them alight.' }[S.liquids.get(k)]);
-  if (S.backrooms.has(k) && !out.length) out.push('Yellow carpet. Something is wrong with this room.');
+  if (S.inDuct && S.ducts.has(k)) out.push(S.grates.has(k) ? 'Vent grate' : 'Air duct');
+  if (x === P.x && y === P.y) out.push('You');
+  if (e && visible(e)) out.push(ENEMY_TYPES[e.kind].name + (isCamera(e) && (S.camLoop > 0 || e.looped > 0) ? ' (looped)' : e.bribed ? ' (bribed)' : ''));
+  if (f) out.push({ desk: 'Desk', cabinet: 'Cabinet', safe: f.opened ? 'Safe (open)' : 'Safe', vending: 'Vending machine', terminal: 'Terminal',
+    husk: 'Droid husk', altar: 'Altar', stairs: 'Fire stairs', contact: 'Contact', phone: 'Phone' }[f.kind]);
+  if (S.grates.has(k) && !S.inDuct) out.push('Vent grate');
+  if (doorAt(x, y)) out.push(`Door (${S.doors.get(k)} HP)`);
+  if (S.keyDoors.has(k)) out.push('Keycard door');
+  if (S.codeDoors.has(k)) out.push('Keypad door');
+  if (S.vats.has(k)) out.push(S.breakable.name[0].toUpperCase() + S.breakable.name.slice(1));
+  if (x === S.exit.x && y === S.exit.y) out.push('Lift');
+  if (S.loot.has(k)) out.push('Cache');
+  if (S.drops.has(k)) out.push('Pickup');
+  if (S.corpses.has(k)) out.push(S.corpses.get(k).searched ? 'Body (searched)' : 'Body');
+  if (S.trips.has(k)) out.push('Laser tripwire');
+  if (S.fire.has(k)) out.push('Fire');
+  else if (S.liquids.has(k)) out.push({ blood: 'Blood', oil: 'Oil', chem: 'Chemicals' }[S.liquids.get(k)]);
   return out.length ? out.join('<br>') : null;
 }
 

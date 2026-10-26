@@ -471,3 +471,4 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 #center { position: absolute; right: 8px; top: 8px; z-index: 5; padding: 4px 10px; font-size: 12px; opacity: .8; }
 #center:hover { opacity: 1; }
 #hand { padding-left: 16px; padding-right: 16px; }
+.panel.body .row.stats { font-size: 13px; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 2px; } .panel.body .row.stats span { color: var(--muted); } .panel.body .row.stats b { color: var(--ink); }

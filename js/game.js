@@ -2226,7 +2226,15 @@ function renderLoot() {
 
 // Camera: drag the map to look anywhere, past the floor's edges too. It only snaps back to you at the start of a
 // floor, when you walk near the edge of the view, or when you press Centre (or C). Redraws never move it.
-function applyCamera() { $('#board').style.transform = `translate(${S.cam.x}px, ${S.cam.y}px)`; }
+// The building may slide at most CAM_MARGIN past the edges of the view (a smaller floor just stays centred).
+const CAM_MARGIN = T * 2;
+function clampCamera() {
+  const vp = $('#viewport'), W = vp.clientWidth, H = vp.clientHeight, bw = S.w * T, bh = S.h * T;
+  const axis = (v, view, size) => size + 2 * CAM_MARGIN <= view ? (view - size) / 2 : Math.min(CAM_MARGIN, Math.max(view - size - CAM_MARGIN, v));
+  S.cam = { x: axis(S.cam.x, W, bw), y: axis(S.cam.y, H, bh) };
+}
+function applyCamera() {
+  clampCamera(); $('#board').style.transform = `translate(${S.cam.x}px, ${S.cam.y}px)`; }
 
 function centerCamera() {
   const vp = $('#viewport'), P = S.player;
@@ -2412,6 +2420,7 @@ function bodyHTML() {
     return `<div class="row" title="${tip(p)}"><span>${p.name}</span><b class="${i ? '' : 'empty'}">${i ? IMPLANTS[i].name : '—'}</b></div>` +
       (d ? `<div class="row defect" title="${tip(p)}"><span></span><b class="lost">${DEFECTS[d].name}</b></div>` : ''); }).join('');
   return `<div class="panel body">
+    <div class="row stats"><span>Strength <b>${run.char.strength + serumBonus("strength")}</b></span><span>Move <b>${moveStat()}</b></span></div>
     <svg class="figure" viewBox="0 0 100 160" aria-label="Your body and its implants">
       <g class="sil"><circle cx="50" cy="20" r="14"/><rect x="44" y="33" width="12" height="8"/>
         <path d="M28 42h44l6 52h-12l-2 64h-11l-3-44-3 44h-11l-2-64h-12z"/><path d="M28 42l-10 46 7 2 9-36zM72 42l10 46-7 2-9-36z"/></g>
@@ -2429,7 +2438,6 @@ function renderSide() {
     <div class="panel">
       <div class="row"><b>Floor ${S.room + 1} / ${FLOORS.length}</b><span>Round ${S.round}</span></div>
       <div class="floorname">${FLOORS[S.room].name}</div>
-      <div class="row"><span>${run.char.name}</span><span>STR ${run.char.strength + serumBonus("strength")} · MOVE ${moveStat()}</span></div>
       <div class="row"><span>Alarm</span><span class="alarm">${Array.from({ length: ALARM_MAX }, (_, i) => `<i class="${i < S.alarm ? 'on' : ''}"></i>`).join('')}</span></div>
       <div class="hpbig"><i style="width:${100 * hp / P.max}%"></i><span>HP ${hp} / ${P.max}</span></div>
       <canvas id="minimap"></canvas>
@@ -2548,7 +2556,8 @@ function renderHand() {
 // Just the name of whatever is on the tile under the mouse (one line per thing), with a word of state where it matters.
 function describeTile(x, y) {
   const k = key(x, y);
-  if (!S.seen.has(k) && !S.planned && !S.ductSeen.has(k)) return null;
+  // Only what you have actually seen (a floor plan shows the layout, not what is in the rooms).
+  if (!S.seen.has(k) && !S.ductSeen.has(k)) return null;
   const out = [], P = S.player, f = S.furn.get(k), e = enemyAt(x, y);
   if (S.inDuct && S.ducts.has(k)) out.push(S.grates.has(k) ? 'Vent grate' : 'Air duct');
   if (x === P.x && y === P.y) out.push('You');

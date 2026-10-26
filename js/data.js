@@ -119,8 +119,8 @@ const BREAKABLES = {
 // safes hold other guns: taking one swaps it for yours, and your old gun stays on the floor (you can swap back).
 // Guns trade off rather than stack: quiet or loud, damage, range, a cone or a line.
 const GUNS = {
-  // The one you start with is deliberately weak: anything you find is an upgrade of some kind.
-  silenced: { name: 'Silenced Pistol',    text: 'Quiet. 3 damage, range 4.',                                    action: { type: 'ranged', gun: true, dmg: 3, range: 4, silent: true } },
+  // The one you start with is unreliable: anything you find is an upgrade of some kind.
+  silenced: { name: 'Silenced Pistol',    text: 'Quiet. 5 damage, range 5, but misses 1 shot in 10.',          action: { type: 'ranged', gun: true, dmg: 5, range: 5, silent: true, miss: 0.1 } },
   carbine:  { name: 'Suppressed Carbine', text: 'Quiet. 5 damage, range 6.',                                    action: { type: 'ranged', gun: true, dmg: 5, range: 6, silent: true } },
   revolver: { name: 'Heavy Revolver',     text: 'Loud. 8 damage, range 5.',                                     action: { type: 'ranged', gun: true, dmg: 8, range: 5 } },
   rifle:    { name: 'Smart Rifle',        text: 'Loud. 6 damage, range 8.',                                     action: { type: 'ranged', gun: true, dmg: 6, range: 8 } },

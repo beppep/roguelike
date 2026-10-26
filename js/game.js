@@ -335,7 +335,7 @@ function dirTo(x, y) {
 
 const atkName = s => s.gun ? (s.dmg ? `Shoot ${s.dmg}` : `Sleep ${s.stun}`) : [s.dmg ? `Attack ${s.dmg + (s.str && S ? strBonus() : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
   .filter(Boolean).join(' + ');
-const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Terminal, keypad or camera' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
+const atkLabel = s => `${atkName(s)}${s.miss ? ` (${Math.round(100 - s.miss * 100)}% to hit)` : ''} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Terminal, keypad or camera' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
 
 // ---------- State ----------
 let S = null;
@@ -1119,6 +1119,8 @@ async function useAttack(hit) {
     if (s.type === 'point' && s.ignite) { ignite(first.x, first.y); makeNoise(first.x, first.y, NOISE.shape, P); log('Incinerate: a jet of fire.'); }
     else if (s.type === 'point') { showNoise(first.x, first.y, s.noise); makeNoise(first.x, first.y, s.noise, first); log(`You toss a coin into the ${areaName(first.x, first.y)}.`); }
     else if (s.type === 'ranged') { sfx(s.silent || !s.dmg ? 'puff' : 'bang'); await shot(P, first); }
+    // Some guns miss now and then: the shot is spent and nothing is hit.
+    if (s.miss && Math.random() < s.miss) { floatText(first, 'MISS', 'stun'); log('You miss.'); renderUnits(); await sleep(250); a.atkUsed = true; S.busy = false; return nextAction(); }
     else { if (s.dmg > 0) sfx('hit'); else if (s.stun) sfx('stun'); await lunge(P, first); }
     if (s.cost) { S.player.hp = Math.max(1, S.player.hp - s.cost); floatText(S.player, '-' + s.cost, 'dmg'); log(`You pay ${s.cost} HP in blood.`); }
     if (s.breach && !doors.length && breakableWall(first.x, first.y)) blowWall(first.x, first.y);

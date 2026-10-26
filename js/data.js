@@ -111,7 +111,6 @@ const STRUCTURE_HP = { keydoor: 15, codedoor: 12, wall: 20, desk: 4, cabinet: 6,
 const BREAKABLES = {
   pharma:  { name: 'vat',   hp: 4, drop: 'potion' },
   weapons: { name: 'crate', hp: 6, drop: 'gun' },
-  flesh:   { name: 'blood font', hp: 3, drop: 'potion' },
 };
 
 // ---------- Guns ----------
@@ -198,7 +197,7 @@ const FLOORS = [
   { name: 'Weapons Foundry', theme: 'weapons', cache: 'a weapons locker',   seed: 2202, w: 46, h: 30, vCorridors: 2,
     extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, cameras: 4, civilians: 3, mix: 'ggddden', oilrooms: 1, puddles: { kind: 'oil', count: 6 }, loot: { card: 0.35, creds: 0.4, potion: 0.25 } },
   { name: 'Meatology',       theme: 'flesh',   cache: 'a reliquary',        seed: 4404, w: 50, h: 34, vCorridors: 3,
-    extraDoors: 0.35, enemyChance: 0.4, lootChance: 0.45, guards: 2, cameras: 2, mix: 'kkkmgy', oilrooms: 1, altars: 2, puddles: { kind: 'blood', count: 6 }, loot: { card: 0.25, creds: 0.3, potion: 0.45 } },
+    extraDoors: 0.35, enemyChance: 0.4, lootChance: 0.45, guards: 2, cameras: 2, mix: 'kkkmgy', oilrooms: 1, altars: 2, props: false, puddles: { kind: 'blood', count: 6 }, loot: { card: 0.25, creds: 0.3, potion: 0.45 } },
 ];
 FLOORS.forEach((fl, i) => { fl.index = i; });
 

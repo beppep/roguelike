@@ -253,7 +253,8 @@ function generateFloor(f) {
       g[p[1]][p[0]] = 'F';
       if (!roomConnected(r)) g[p[1]][p[0]] = '.';
     }
-    for (let i = 0; i < Math.floor(area / 18); i++) { const p = loneSpot(r); if (p) g[p[1]][p[0]] = 'o'; }
+    // The floor's own clutter (vats, crates), unless the floor has none (props: false).
+    if (f.props !== false) for (let i = 0; i < Math.floor(area / 18); i++) { const p = loneSpot(r); if (p) g[p[1]][p[0]] = 'o'; }
     // A wall safe, opened with a code found elsewhere on the floor.
     for (let i = 0; i < 6 && safeRooms.includes(r); i++) {
       const p = wallSpot(r);

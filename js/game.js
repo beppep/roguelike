@@ -23,7 +23,6 @@ const hasGear = id => !!run && Object.values(run.gear).includes(id);
 const hasImplant = id => !!run && run.implants.includes(id);
 const hasDefect = id => !!run && run.defects.includes(id);
 // Free steps per turn: the operative's Move, plus gear, minus defects.
-const energyMax = () => ENERGY_MAX + (hasImplant('spinaltap') ? 2 : 0);
 // Steps a move card gives: your Move stat for 'base', plus any bonus.
 const cardMove = s => (s.move === 'base' ? (run ? moveStat() : OPERATIVE.move) : s.move || 0) + (s.moveBonus || 0);
 const moveStat = () => run.char.move + (hasGear('runners') ? 1 : 0) - (hasDefect('spinal') ? 1 : 0);
@@ -52,7 +51,7 @@ function pathTo(prev, sx, sy, tx, ty) {
 // Line of sight: sample along the line between tile centers; walls block, units don't.
 // The target tile itself doesn't count, so you can shoot at a door.
 // Low furniture you can see (and shoot) over. Cabinets, vending machines, safes, vats and crates still block.
-const LOW_FURNITURE = new Set(['desk', 'terminal', 'altar', 'contact', 'phone']);
+const LOW_FURNITURE = new Set(['desk', 'terminal', 'altar', 'contact', 'phone', 'husk']);
 const LOW_PROPS = new Set(['droids', 'flesh']);
 const blocksSight = (x, y) => isWall(x, y) && !(S.furn.has(key(x, y)) && LOW_FURNITURE.has(S.furn.get(key(x, y)).kind)) && !(S.props.has(key(x, y)) && LOW_PROPS.has(FLOORS[S.room].theme));
 
@@ -90,12 +89,12 @@ function atkTiles(s, from, dir) {
   const out = [], seen = new Set();
   const add = (x, y) => {
     const k = key(x, y);
-    if ((isWall(x, y) && !doorAt(x, y) && !vatAt(x, y) && !(s.breach && breakableWall(x, y))) || seen.has(k) || (x === from.x && y === from.y)) return;
+    if ((isWall(x, y) && !doorAt(x, y) && !vatAt(x, y) && !(s.breach && breakableWall(x, y)) && !(s.type === 'hack' && hackTargetAt(x, y))) || seen.has(k) || (x === from.x && y === from.y)) return;
     seen.add(k); out.push({ x, y });
   };
   if (s.type === 'self') return out;
   if (s.type === 'melee') DIRS.forEach(([dx, dy]) => add(from.x + dx, from.y + dy));
-  else if (s.type === 'ranged' || s.type === 'point') {
+  else if (s.type === 'ranged' || s.type === 'point' || s.type === 'hack') {
     for (let y = from.y - s.range; y <= from.y + s.range; y++) for (let x = from.x - s.range; x <= from.x + s.range; x++) {
       const d = manh({ x, y }, from);
       if (d >= 1 && d <= s.range && los(from, { x, y })) add(x, y);
@@ -119,7 +118,7 @@ const turnLeft = ([dx, dy]) => [dy, -dx];
 
 // Vision cone: up to `vision` tiles ahead, widening by one tile to each side every two tiles. Walls block.
 function visionTiles(e) {
-  if (S.camLoop > 0 && ENEMY_TYPES[e.kind].camera) return [];
+  if (ENEMY_TYPES[e.kind].camera && (S.camLoop > 0 || e.looped > 0)) return [];
   if (e.stunned) return [];
   const [fx, fy] = e.facing, [px, py] = turnRight(e.facing), out = [];
   for (let f = 1; f <= visionOf(e); f++) {
@@ -325,9 +324,9 @@ function dirTo(x, y) {
   return Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
 }
 
-const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0) + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? 'Noise' : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '']
+const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0) + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? 'Noise' : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
   .filter(Boolean).join(' + ');
-const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
+const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Terminal, keypad or camera' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
 
 // ---------- State ----------
 let S = null;
@@ -357,7 +356,7 @@ const FLOOR_WRITING_SHARE = 0.7;
 
 function makeFurniture(kind) {
   const loot = Math.random() < FURNITURE_LOOT_CHANCE * (S.adapt === 'thief' ? 0.5 : 1) ? (Math.random() < 0.4 ? randomPotion() : Math.random() < 0.6 ? randomGadget() : 'creds') : null;
-  const theme = FLOORS[S.room].theme, local = FLOOR_WRITING[theme] && Math.random() < FLOOR_WRITING_SHARE;
+  const theme = FLOORS[S.room].theme === 'weapons' && Math.random() < 0.4 ? 'droids' : FLOORS[S.room].theme, local = FLOOR_WRITING[theme] && Math.random() < FLOOR_WRITING_SHARE;
   if (kind === 'desk') return { kind, searched: false, loot, email: local ? nextDoc(FLOOR_WRITING[theme].emails, 'email-' + theme) : nextDoc(EMAILS, 'email') };
   return { kind, searched: false, loot, doc: Math.random() < 0.2 ? null : local ? nextDoc(FLOOR_WRITING[theme].documents, 'doc-' + theme) : nextDoc(DOCUMENTS, 'doc') };
 }
@@ -365,15 +364,16 @@ function makeFurniture(kind) {
 // Searching takes no card and no move, but you have to be standing right next to it.
 function searchFurniture(x, y) {
   const f = S.furn.get(key(x, y)), P = S.player;
-  const what = { desk: 'computer', cabinet: 'cabinet', safe: 'safe', vending: 'vending machine', terminal: 'terminal', altar: 'altar', stairs: 'stairwell door', contact: 'person', phone: 'phone' }[f.kind];
+  const what = { desk: 'computer', cabinet: 'cabinet', safe: 'safe', vending: 'vending machine', terminal: 'terminal', husk: 'droid husk', altar: 'altar', stairs: 'stairwell door', contact: 'person', phone: 'phone' }[f.kind];
   if (Math.abs(P.x - x) + Math.abs(P.y - y) !== 1) { toast(`Get next to the ${what} to use it.`); return; }
   if (f.kind === 'safe') return f.opened ? toast('The safe is empty.') : openKeypad('safe', x, y);
   if (f.kind === 'vending') return openShop();
-  if (f.kind === 'terminal') return openTerminal(x, y);
+  if (f.kind === 'terminal') return toast('A networked terminal. Pick a Hack half and click the terminal from next to it.');
+  if (f.kind === 'husk') return showModal('Droid husk', '', [['closeread', 'Close']], `<div class="doc mail"><p>${DROID_LOGS[(x * 7 + y) % DROID_LOGS.length]}</p></div>`);
   if (f.kind === 'stairs') return showModal('Fire stairs', 'A stairwell door, propped open with a fire extinguisher. Taking the stairs skips the lift: no story, no reward, and the Head loses track of you, so the next floor is not set against you.',
     [['stairs', 'Take the stairs'], ['closeread', 'Not yet']]);
   if (f.kind === 'contact') {
-    const c = CONTACT_LINES[S.room] || CONTACT_LINES[0];
+    const c = CONTACT_LINES[{ pharma: 0, weapons: 1, droids: 2, flesh: 3 }[FLOORS[S.room].theme]] || CONTACT_LINES[0];
     showModal(c.name, '', [['closeread', 'Go']], `<div class="doc paper"><p>${c.text}</p></div>`);
     if (!f.used) { f.used = true; contactGift(x, y); }
     return;
@@ -410,33 +410,70 @@ function searchFurniture(x, y) {
   else if (first && !f.clue && !f.story) log(f.kind === 'desk' ? 'You read the screen.' : 'You leaf through the cabinet.');
 }
 
-// ---------- Terminals ----------
-// Hacking is free (no card, no move) but costs Energy. Each hack works once per terminal.
-// Firewalled terminals (after the Head noticed your hacking) also bite: 1 HP per hack.
-const hackCost = h => S.freeHack ? 0 : Math.max(0, h.cost - (hasGear('jammer') ? 1 : 0));
+// ---------- Hacking ----------
+// The Hack half: a terminal or keypad door within reach (next to you; Spinal Tap: 3 tiles, in sight), or a camera
+// in sight within 5. Each hack works once per terminal. Firewalled terminals (after the Head noticed your hacking)
+// also bite: 1 HP per hack. Every hack may be traced (alarm +1) unless you carry a Signal Jammer.
+const hackReach = () => hasImplant('spinaltap') ? HACK_REACH_TAP : HACK_REACH;
+function hackTargetAt(x, y) {
+  const P = S.player, d = manh(P, { x, y }), near = d <= hackReach() && (d === 1 || los(P, { x, y }));
+  const f = S.furn.get(key(x, y));
+  if (f && f.kind === 'terminal' && near) return 'terminal';
+  if (S.codeDoors.has(key(x, y)) && near) return 'keypad';
+  const e = enemyAt(x, y);
+  if (e && isCamera(e) && d <= 5 && los(P, e) && !(e.looped > 0)) return 'camera';
+  return null;
+}
+
+function traceRisk() {
+  S.stats.hacks++;
+  sfx('hack');
+  if (!hasGear('jammer') && Math.random() < TRACE_CHANCE) { log('<b>Traced.</b> The Head\'s ICE follows the connection back to you. The alarm rises.'); raiseAlarm(1); }
+}
+
+// Spends this turn's Hack. Called once a hack has actually happened.
+function hackDone() { S.act.atkUsed = true; S.busy = false; render(); }
+
+function hackAt(t) {
+  const what = hackTargetAt(t.x, t.y);
+  if (what === 'terminal') return openTerminal(t.x, t.y);
+  if (what === 'keypad') {
+    S.codeDoors.delete(key(t.x, t.y));
+    traceRisk();
+    log('You talk the keypad into opening.');
+    renderCodeDoors(); renderUnits();
+    return hackDone();
+  }
+  if (what === 'camera') {
+    const c = enemyAt(t.x, t.y);
+    c.looped = CAMERA_LOOP_ROUNDS;
+    traceRisk();
+    floatText(c, 'LOOPED', 'stun');
+    log(`You loop the camera's feed for ${CAMERA_LOOP_ROUNDS} rounds.`);
+    renderUnits();
+    return hackDone();
+  }
+}
 
 function openTerminal(x, y) {
   const f = S.furn.get(key(x, y));
   S.terminal = { x, y };
   const rows = HACKS.map(h => {
     const done = f.done.has(h.id) || (h.id === 'doors' && !S.keyDoors.size) || (h.id === 'plan' && S.planned);
-    const cost = hackCost(h);
-    return `<button class="hack" data-act="hack-${h.id}" ${done || cost > S.energy ? 'disabled' : ''}>
-      <b>${h.name}</b> <span>${done ? 'done' : cost ? cost + ' Energy' : 'free'}</span><small>${h.text}</small></button>`;
+    return `<button class="hack" data-act="hack-${h.id}" ${done ? 'disabled' : ''}>
+      <b>${h.name}</b> <span>${done ? 'done' : ''}</span><small>${h.text}</small></button>`;
   }).join('');
-  showModal('Terminal', `Energy ${S.energy} / ${energyMax()}.${hasGear('jammer') ? '' : ` Each hack has a ${Math.round(TRACE_CHANCE * 100)}% chance to be traced (alarm +1).`}${f.firewall ? ' <b class="lost">Firewalled: every hack costs 1 HP.</b>' : ''}`,
+  showModal('Terminal', `Your Hack gets you one of these.${hasGear('jammer') ? '' : ` It has a ${Math.round(TRACE_CHANCE * 100)}% chance to be traced (alarm +1).`}${f.firewall ? ' <b class="lost">Firewalled: every hack costs 1 HP.</b>' : ''}`,
     [['closeread', 'Log off']], `<div class="terminal-menu">${rows}</div>`);
+  S.busy = false;
 }
 
 function doHack(id) {
   const t = S.terminal, f = t && S.furn.get(key(t.x, t.y)), h = HACKS.find(x => x.id === id);
-  if (!f || !h || f.done.has(id) || hackCost(h) > S.energy) return;
-  S.energy -= hackCost(h);
-  if (S.freeHack) S.freeHack = false;
+  if (!f || !h || f.done.has(id) || S.act.atkUsed) return;
+  $('#modal').hidden = true;
   f.done.add(id);
-  S.stats.hacks++;
-  sfx('hack');
-  if (!hasGear('jammer') && Math.random() < TRACE_CHANCE) { log('<b>Traced.</b> The Head\'s ICE follows the connection back to you. The alarm rises.'); raiseAlarm(1); }
+  traceRisk();
   if (f.firewall) { damage(S.player, 1); log('The firewall bites back. 1 damage.'); if (S.player.hp <= 0) { $('#modal').hidden = true; return gameOver('The firewall fried your nervous system.'); } }
   if (id === 'loop') { S.camLoop = CAMERA_LOOP_ROUNDS; log(`You loop the cameras for ${CAMERA_LOOP_ROUNDS} rounds.`); }
   else if (id === 'doors') { S.keyDoors.clear(); renderKeyDoors(); log('Every keycard door on the floor clunks open.'); }
@@ -448,7 +485,7 @@ function doHack(id) {
     if (at) { showNoise(at.x, at.y, 10); makeNoise(at.x, at.y, 10, at, true); log(`A fire alarm rings in the ${areaName(at.x, at.y)} of the floor.`); }
   }
   renderUnits(); renderOverlays(); renderSide();
-  openTerminal(t.x, t.y);
+  hackDone();
 }
 
 // ---------- Air ducts ----------
@@ -458,7 +495,7 @@ async function enterDuct(x, y) {
   const a = S.act, P = S.player;
   if (manh(P, { x, y }) !== 1) { toast('Get next to the vent grate.'); return; }
   if (a.mvUsed || a.move < 1) { toast('You have no steps left this turn.'); return; }
-  if (S.playing && !S.act.atkUsed && S.playing.action.type !== 'self') { S.playing = null; a.atk = null; }
+  if (S.playing && !S.act.atkUsed && a.atk && a.atk.type !== 'self') { S.playing = null; a.atk = null; }
   S.busy = true;
   S.inDuct = true;
   sfx('vent');
@@ -539,7 +576,6 @@ function useGadget(id) {
   if (g.throw && S.inDuct) { toast('No room to throw in a duct.'); return; }
   if (g.throw) { S.throwing = S.throwing === id ? null : id; render(); if (S.throwing) toast(`Click where to throw the ${g.name}.`); return; }
   run.items[id]--;
-  if (id === 'battery') { S.energy = Math.min(energyMax(), S.energy + 2); log('You slot in a battery. +2 Energy.'); }
   if (id === 'ld50') {
     heal(S.player.max);
     const pool = Object.keys(DEFECTS).filter(x => !hasDefect(x));
@@ -759,7 +795,7 @@ function loadRoom(idx) {
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
     doors: new Map(), keyDoors: new Set(), codeDoors: new Map(), codes: [], planned: false, keypad: null, props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
-    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0, energy: energyMax(), freeHack: hasImplant('spinaltap'),
+    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0,
     alarm: 0, reinforceIn: 0, adapt: run.adapt, noiseBonus: run.adapt === 'loud' ? 1 : 0, familiar: hasEcho('staff'), stats: { kills: 0, takedowns: 0, alerts: 0, cameras: 0, alarm: 0, pickpockets: 0, smashed: 0, hacks: 0, loot: 0 },
   };
   let n = 0;
@@ -779,6 +815,7 @@ function loadRoom(idx) {
       else if (c === 'r') S.circles.add(key(x, y));
       else if (c === 'A') S.furn.set(key(x, y), { kind: 'altar', used: false });
       else if (c === 'Z') S.furn.set(key(x, y), { kind: 'stairs' });
+      else if (c === 'U') S.furn.set(key(x, y), { kind: 'husk' });
       else if (c === 'Q') S.furn.set(key(x, y), { kind: 'contact', used: false });
       else if (c === 'H') S.furn.set(key(x, y), { kind: 'phone', used: false });
       else if (c === 'w') S.trips.add(key(x, y));
@@ -789,7 +826,7 @@ function loadRoom(idx) {
       }
       else if (c === '$') S.loot.set(key(x, y), rollLoot(FLOORS[idx].loot) || 'creds');
       else if (ENEMY_TYPES[c]) S.enemies.push({ id: 'e' + n++, kind: c, x, y, hp: ENEMY_TYPES[c].hp, max: ENEMY_TYPES[c].hp, intent: null, alerted: false, facing: [0, 1] });
-      return c === '#' || 'oKFSVTGAZQH'.includes(c);
+      return c === '#' || 'oKFSVTGAZQHU'.includes(c);
     }));
   });
   S.nextId = n;
@@ -815,7 +852,7 @@ function loadRoom(idx) {
 // Pick exactly DECK_SIZE cards to take onto floor `idx`; the rest are dropped for good.
 // Starts with a suggestion: everything except your weakest attack cards (basic Shock Batons first).
 function chooseKeep(idx) {
-  const byWeakness = deck.filter(c => c.action.dmg > 0).sort((a, b) => a.action.dmg - b.action.dmg || a.id - b.id);
+  const byWeakness = deck.filter(c => cardMaxDmg(c) > 0).sort((a, b) => cardMaxDmg(a) - cardMaxDmg(b) || a.id - b.id);
   const keep = new Set(deck);
   for (const c of byWeakness) if (keep.size > DECK_SIZE) keep.delete(c);
   const m = $('#modal');
@@ -870,16 +907,20 @@ function startRound() {
 
 // During a turn, clicking a ready card picks it as this turn's card (click it again to put it back).
 // Self cards (heals, sprint) take effect at once. While resting, clicking picks the card to burn.
-function pickCard(card) {
+// Clicking one half of a ready card picks that half as this turn's action (click it again to put it back).
+function pickCard(card, half = 0) {
   if (S.busy) return;
   if (S.phase === 'burn') { S.sel = S.sel === card ? null : card; renderHand(); renderBar(); return; }
   if (S.phase !== 'turn' || card.used || S.act.atkUsed) return;
   S.hoverDir = null; S.preview = null;
-  if (S.playing === card) { S.playing = null; S.act.atk = null; return render(); }
-  S.playing = card; S.act.atk = card.action;
-  if (card.action.type === 'self') return useSelf();
+  if (S.playing === card && S.half === half) { S.playing = null; S.act.atk = null; return render(); }
+  S.playing = card; S.half = half; S.act.atk = card.halves[half].action;
+  if (S.act.atk.type === 'self') return useSelf();
   render();
 }
+// The half you're playing this turn ({ name, action }).
+const playedHalf = () => S.playing && S.playing.halves[S.half];
+const cardMaxDmg = c => Math.max(...c.halves.map(h => h.action.dmg || 0));
 
 // Resting replaces the whole turn, so it's only possible before you've moved or used a card.
 function startRest() {
@@ -895,7 +936,6 @@ async function godRest() {
   if (S.phase !== 'turn' || S.busy) return;
   S.playing = null; S.act.atk = null; S.preview = null;
   S.cards.forEach(x => { x.used = false; });
-  S.energy = Math.min(energyMax(), S.energy + 1);
   tickSerums();
   log('You rest. God mode: nothing is burned.');
   await runEnemyPhase();
@@ -919,7 +959,6 @@ async function confirmRest() {
   S.cards = S.cards.filter(x => x !== c);
   S.cards.forEach(x => { x.used = false; });
   S.burned++;
-  S.energy = Math.min(energyMax(), S.energy + 1);
   S.hidden = hasImplant('chameleon');
   if (hasDefect('deathdrive') && S.player.hp > 1) { S.player.hp--; log('Death Drive: resting costs you 1 HP.'); }
   tickSerums();
@@ -955,7 +994,7 @@ function useSelf() {
 }
 
 // Something this card can affect on that tile: an enemy, a door, or a breakable vat.
-const hasTarget = (s, t) => (s.type === 'point' && !isWall(t.x, t.y)) || (s.breach && breakableWall(t.x, t.y)) || (s.push && enemyAt(t.x, t.y)) || (!s.pick && !s.breach && enemyAt(t.x, t.y)) || (canHitDoor(s) && doorAt(t.x, t.y)) || (s.dmg > 0 && vatAt(t.x, t.y));
+const hasTarget = (s, t) => s.type === 'hack' ? !!hackTargetAt(t.x, t.y) : s.bribe ? !!(enemyAt(t.x, t.y) && canBribe(enemyAt(t.x, t.y))) : (s.type === 'point' && !isWall(t.x, t.y)) || (s.breach && breakableWall(t.x, t.y)) || (s.push && enemyAt(t.x, t.y)) || (!s.pick && !s.breach && enemyAt(t.x, t.y)) || (canHitDoor(s) && doorAt(t.x, t.y)) || (s.dmg > 0 && vatAt(t.x, t.y));
 
 const breakableWall = (x, y) => x > 0 && y > 0 && x < S.w - 1 && y < S.h - 1 && S.walls[y][x] && !S.props.has(key(x, y)) && !S.furn.has(key(x, y)) && !S.grates.has(key(x, y));
 
@@ -980,16 +1019,11 @@ async function onTileClick(x, y) {
   const a = S.act, P = S.player;
   if (S.throwing) return throwAt(x, y);
   if (S.inDuct) return ductClick(x, y);
+  if (a.atk && !a.atkUsed && (a.atk.type === 'hack' || a.atk.bribe)) { const hit = attackHit(a.atk, x, y); if (hit) return useAttack(hit); }
   if (S.furn.has(key(x, y))) return searchFurniture(x, y);
   if (S.grates.has(key(x, y))) return enterDuct(x, y);
-  if (S.props.has(key(x, y)) && FLOORS[S.room].theme === 'droids' && manh(P, { x, y }) === 1 && !(a.atk && !a.atkUsed)) {
-    showModal('Droid husk', '', [['closeread', 'Close']], `<div class="doc mail"><p>${DROID_LOGS[(x * 7 + y) % DROID_LOGS.length]}</p></div>`);
-    return;
-  }
   if (S.keyDoors.has(key(x, y))) return swipeKeycard(x, y);
   if (S.codeDoors.has(key(x, y))) return openKeypad("door", x, y);
-  const who = enemyAt(x, y);
-  if (who && !a.atk && manh(P, who) === 1 && canBribe(who)) return offerBribe(who);
   if (a.atk && !a.atkUsed) {
     const hit = attackHit(a.atk, x, y);
     if (hit) return useAttack(hit);
@@ -1023,6 +1057,8 @@ async function onTileClick(x, y) {
 async function useAttack(hit) {
   const a = S.act, P = S.player;
   let s = a.atk;
+  if (s.type === 'hack') { S.busy = true; return hackAt(hit[0]); }
+  if (s.bribe) return bribe(enemyAt(hit[0].x, hit[0].y));
   {
     if (s.dmg > 0) s = { ...s, dmg: s.dmg + gunBonus(s) + (s.str ? serumBonus("strength") : 0) };
     const targets = hit.map(t => !s.pick && enemyAt(t.x, t.y)).filter(Boolean);
@@ -1107,6 +1143,18 @@ function blowWall(x, y) {
 }
 
 const canBribe = e => !e.alerted && !e.bribed && !isCamera(e) && !ENEMY_TYPES[e.kind].machine && !ENEMY_TYPES[e.kind].heavy && !ENEMY_TYPES[e.kind].daemon;
+
+// The Bribe half: someone next to you who hasn't spotted you takes BRIBE_PRICE and never saw you.
+function bribe(e) {
+  if (!e || !canBribe(e)) return;
+  if (run.creds < BRIBE_PRICE) { toast(`A bribe costs ¥${BRIBE_PRICE}. You have ¥${fmtMove(run.creds)}.`); return; }
+  run.creds -= BRIBE_PRICE;
+  e.bribed = true;
+  floatText(e, '¥', 'stun');
+  log(`You fold ¥${BRIBE_PRICE} into ${nameOf(e)}'s hand. They look the other way for the rest of the shift.`);
+  S.act.atkUsed = true;
+  render();
+}
 
 function offerBribe(e) {
   S.bribeTarget = e;
@@ -1276,7 +1324,7 @@ function takeDrop(x, y) {
   } else {
     run.gunMods++;
     floatText({ x, y }, '+1 GUN', 'stun');
-    const guns = S.cards.filter(c => gunBonus(c.action)).map(c => c.name);
+    const guns = S.cards.filter(c => c.halves.some(h => gunBonus(h.action))).map(c => c.name);
     log(`You fit a <b>gun mod</b>: guns deal +${run.gunMods} damage.` + (guns.length ? '' : ' You have no gun card right now, so it does nothing.'));
     renderHand();
   }
@@ -1381,7 +1429,7 @@ function nextAction() {
 async function endTurn() {
   if (S.busy || S.phase !== 'turn') return;
   if (!S.playing) { toast('Pick a card first, or rest.'); return; }
-  if (S.playing.action.dmg > 0) S.lastCard = S.playing;
+  if (playedHalf().action.dmg > 0) S.lastCard = playedHalf();
   S.playing.used = true; S.playing = null;
   S.hidden = hasImplant('chameleon') && !S.act.steps;
   tickSerums();
@@ -1564,6 +1612,7 @@ async function fleeTurn(e) {
 
 // Cameras sweep, or keep facing you for a couple of turns after spotting you.
 async function cameraTurn(c) {
+  if (c.looped > 0) c.looped--;
   if (c.cool > 0) c.cool--;
   if (c.tracking > 0) {
     c.tracking--;
@@ -2038,7 +2087,7 @@ function showFinalLift() {
   sfx('lift');
   const m = STORY_DOCS[STORY_DOCS.length - 1];
   showModal('The spine', '', [['ending-0', 'Touch the Head']], `<div class="lift">
-    <p class="lift-story">${ELEVATOR_STORIES[S.room] || ''}</p>
+    <p class="lift-story">${ELEVATOR_STORIES[ELEVATOR_STORIES.length - 1]}</p>
     <div class="doc mail story"><div class="doc-head">From: ${m.from}<br>Subject: ${m.subject}</div><p>${m.body}</p></div></div>`);
   $('#modal .box').classList.add('wide');
 }
@@ -2063,8 +2112,9 @@ function showEcho() {
 // ---------- How to play ----------
 function showHowTo() {
   showModal('How to play', '', [['title', 'Back']], `<div class="title howto">
-    <p><b>Each turn</b> play one card and move up to your Move, in any order, then press End turn. Searching desks, swiping keycards,
-    keypads, terminals, vending machines and items are free. <b>Resting</b> takes a whole turn: you burn one card for good and get the rest back.</p>
+    <p><b>Each turn</b> play one half of one card and move up to your Move, in any order, then press End turn. Every card has two
+    halves, like Melee Attack or Sprint: you choose which. Searching desks, swiping keycards, keypads, vending machines and items
+    are free. Terminals need a Hack half. Hover anything on the floor to see what it is. <b>Resting</b> takes a whole turn: you burn one card for good and get the rest back.</p>
     <p><b>Reach the lift</b> on each floor. You don't have to fight anyone. Some lifts sit behind keycard doors: pickpocket a carrier
     (marked KEY), search their body, hack a terminal, crawl through a vent, or blow a hole in the wall.</p>
     <p><b>Be seen less.</b> Yellow tiles are what people see now, violet what they'll see next. Noise draws people to it
@@ -2200,11 +2250,11 @@ function drawMinimap() {
   dot(S.player.x, S.player.y, '#f1ead9');
 }
 
-function render() { renderUnits(); renderOverlays(); renderSide(); renderBar(); renderHand(); }
+function render() { renderUnits(); renderOverlays(); renderSide(); renderBar(); renderHand(); updateCamera(); }
 
 function intentHTML(e) {
   if (e.stunned) return '<span class="stun">Stunned</span>';
-  if (isCamera(e) && S.camLoop > 0) return '<span class="stun">Looped</span>';
+  if (isCamera(e) && (S.camLoop > 0 || e.looped > 0)) return '<span class="stun">Looped</span>';
   if (isCamera(e)) return e.tracking ? '<span class="a">Tracking</span>' : '<span class="idle">Watching</span>';
   if (e.alerted && e.fleeing) return `<span class="sus">${isCivilian(e) ? 'Screaming' : 'Fleeing'}</span>`;
   if (isCivilian(e) && !e.suspicious) return '<span class="idle">Working</span>';
@@ -2356,7 +2406,6 @@ function renderSide() {
       <div class="row"><b>Floor ${S.room + 1} / ${FLOORS.length}</b><span>Round ${S.round}</span></div>
       <div class="floorname">${FLOORS[S.room].name}</div>
       <div class="row"><span>${run.char.name}</span><span>STR ${run.char.strength + serumBonus("strength")} · MOVE ${moveStat()}</span></div>
-      <div class="row"><span>Energy</span><span class="energy">${Array.from({ length: energyMax() }, (_, i) => `<i class="${i < S.energy ? 'on' : ''}"></i>`).join('')}</span></div>
       <div class="row"><span>Alarm</span><span class="alarm">${Array.from({ length: ALARM_MAX }, (_, i) => `<i class="${i < S.alarm ? 'on' : ''}"></i>`).join('')}</span></div>
       <div class="hpbig"><i style="width:${100 * hp / P.max}%"></i><span>HP ${hp} / ${P.max}</span></div>
       <canvas id="minimap"></canvas>
@@ -2374,7 +2423,7 @@ function renderSide() {
       ${Object.entries(run.items).filter(([, n]) => n > 0).map(([id, n]) => `<div class="row" title="${GADGETS[id].text}"><span>${GADGETS[id].name}</span><b>${n} <button class="mini-btn ${S.throwing === id ? 'aiming' : ''}" data-act="gadget-${id}" ${canUseItem ? '' : 'disabled'}>${S.throwing === id ? 'Cancel' : GADGETS[id].throw ? 'Throw' : 'Use'}</button></b></div>`).join('')}
       ${S.disguise ? `<div class="row"><span>Disguise</span><b class="ok">${S.disguise}</b></div>` : ''}
       ${S.needKey ? `<div class="row"><span>Keycard</span><b class="${S.hasKey ? 'ok' : 'lost'}">${S.hasKey ? 'Got it' : 'Needed'}</b></div>` : ''}
-      <div class="note">Each turn: play one card and move up to ${moveStat()}. Used cards go dark. Resting takes a turn: you burn one card for good and the rest come back.</div>
+      <div class="note">Each turn: play one half of one card and move up to ${moveStat()}. Used cards go dark. Resting takes a turn: you burn one card for good and the rest come back.</div>
       <div class="note"><span class="key seen"></span>Seen now <span class="key next"></span>Seen on their next move</div>
     </div>
     ${bodyHTML()}
@@ -2392,18 +2441,18 @@ function renderBar() {
     const canRest = godMode || (!a.steps && !a.atkUsed && S.cards.some(x => x.used));
     let hint;
     if (!c) hint = anyReady
-      ? `Click a card to use it, and click a blue tile to move (up to ${fmtMove(a.move)}).`
+      ? `Pick one half of a card to use it, and click a blue tile to move (up to ${fmtMove(a.move)}).`
       : '<b>All your cards are used.</b> Rest to get them back.';
     else if (!a.atkUsed) hint = (isDirectional(a.atk) ? 'Point toward a target and click a red tile' : 'Click a red target')
-      + ` to use <b>${c.name}</b>. Click the card again to put it back.`;
+      + ` to use <b>${playedHalf().name}</b>. Click it again to put it back.`;
     else hint = a.mvUsed ? 'Done for this turn. Use a stim or serum if you like, then end your turn.' : (a.steps ? `You have ${fmtMove(a.move)} step${a.move > 1 ? 's' : ''} left. Click a blue tile, or end your turn.` : 'Click a blue tile to move, or end your turn.');
-    if (S.inDuct) hint = `<b>In the air ducts.</b> Nobody can see you${c && c.action.type !== 'self' && !a.atkUsed ? `, and there's nothing to hit with ${c.name} from here` : ''}. ${S.grates.has(key(S.player.x, S.player.y)) ? 'Click the floor next to this grate to climb out, or crawl on.' : 'Crawl along the duct (blue). Climb out at a grate.'}`;
+    if (S.inDuct) hint = `<b>In the air ducts.</b> Nobody can see you${c && a.atk && a.atk.type !== 'self' && !a.atkUsed ? `, and there's nothing to hit with ${playedHalf().name} from here` : ''}. ${S.grates.has(key(S.player.x, S.player.y)) ? 'Click the floor next to this grate to climb out, or crawl on.' : 'Crawl along the duct (blue). Climb out at a grate.'}`;
     const bonus = '';
     bar.innerHTML = `
       <div class="hint">${hint}</div>
       <div class="chips">
         <span class="chip mv ${a.mvUsed ? 'used' : ''}">${a.mvUsed ? '✓ Moved' : a.steps ? `Move ${fmtMove(a.move)} left` : `Move ${fmtMove(a.move)}`}</span>
-        <span class="chip ${c ? 'atk' : 'empty'} ${a.atkUsed ? 'used' : ''}">${c ? (a.atkUsed ? '✓ ' : '') + atkLabel(c.action) + bonus : 'No card yet'}</span>
+        <span class="chip ${c ? 'atk' : 'empty'} ${a.atkUsed ? 'used' : ''}">${c ? (a.atkUsed ? '✓ ' : '') + atkLabel(playedHalf().action) + bonus : 'No card yet'}</span>
       </div>
       ${canOverdrive() ? '<button data-act="overdrive" title="Synaptic Accelerator: once per floor">Overdrive</button>' : ''}
       <button data-act="rest" ${canRest ? '' : 'disabled'}>Rest</button>
@@ -2440,14 +2489,15 @@ function actionHTML(s) {
       (s.move ? `<div class="big dash">Move +${cardMove(s)}</div>` : '') +
       (s.ghost ? '<div class="big dash">Vanish</div><div class="sub">Cameras and the unaware can\'t see you this round</div>' : '<div class="sub">Self</div>');
   }
-  const sub = s.ignite ? 'Fire. Oil and chemicals spread it' : s.type === 'point' ? 'A sound anywhere you can see' : s.push ? 'Into walls: 2 damage' : s.breach ? 'Blow a hole in a wall. Very loud'
+  const sub = s.type === 'hack' ? 'Terminal or keypad next to you, or a camera in sight' : s.bribe ? 'Someone unaware next to you' : s.ignite ? 'Fire. Oil and chemicals spread it' : s.type === 'point' ? 'A sound anywhere you can see' : s.push ? 'Into walls: 2 damage' : s.breach ? 'Blow a hole in a wall. Very loud'
     : s.cost ? `Costs ${s.cost} HP` : s.pick ? 'Opens a door, quietly'
     : s.steal ? 'Rob someone unaware' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Ranged · clear shot' : SHAPE_NAMES[s.shape];
   return `<div class="big">${atkName(s)}</div><div class="sub">${sub}</div>` +
-    (s.type === 'ranged' || s.type === 'point' ? `<div class="rangeicon">⌖ ${s.range}</div>` : s.type === 'melee' ? '' : diagram(s));
+    (s.type === 'ranged' || s.type === 'point' ? `<div class="rangeicon">⌖ ${s.range}</div>` : s.type === 'melee' || s.type === 'hack' ? '' : diagram(s));
 }
 
-const cardHTML = c => `<div class="half">${actionHTML(c.action)}</div><div class="name">${c.name}</div>`;
+// A card: two halves, each an action with its name. `chosen` = index of the half being played (or -1).
+const cardHTML = (c, chosen = -1) => c.halves.map((h, i) => `<div class="half ${i === chosen ? 'chosen' : ''}" data-half="${i}" title="${h.name}: ${atkLabel(h.action)}">${actionHTML(h.action)}<div class="hname">${h.name}</div></div>`).join('<div class="or">or</div>');
 
 // All your cards for this floor, in a fixed order: used ones are dark, burned ones are gone.
 function renderHand() {
@@ -2463,16 +2513,75 @@ function renderHand() {
     const el = document.createElement('div');
     const picked = S.phase === 'burn' ? S.sel === c : c === S.playing && !spent;
     el.className = 'card' + (c.used || (c === S.playing && spent) ? ' used' : '') + (picked ? ' sel' : '');
-    el.innerHTML = cardHTML(c);
-    el.onclick = () => pickCard(c);
-    el.onmouseenter = () => { if (S.phase === 'turn' && !S.playing && !c.used && !spent) { S.preview = c.action; renderOverlays(); } };
+    el.innerHTML = cardHTML(c, picked && S.phase === 'turn' ? S.half : -1);
+    el.onclick = () => pickCard(c, 0);  // resting: picks the whole card to burn
+    el.querySelectorAll('.half').forEach((hEl, i) => {
+      hEl.onclick = e => { e.stopPropagation(); pickCard(c, i); };
+      hEl.onmouseenter = () => { if (S.phase === 'turn' && !S.playing && !c.used && !spent) { S.preview = c.halves[i].action; renderOverlays(); } };
+    });
     el.onmouseleave = () => { S.preview = null; renderOverlays(); };
     h.appendChild(el);
   }
 }
 
+// ---------- Hover: what is this? ----------
+// One or two short lines about whatever is on the tile under the mouse, and how to use it.
+function describeTile(x, y) {
+  const k = key(x, y);
+  if (!S.seen.has(k) && !S.planned && !S.ductSeen.has(k)) return null;
+  const out = [], P = S.player, f = S.furn.get(k), e = enemyAt(x, y);
+  if (S.inDuct && S.ducts.has(k)) out.push(S.grates.has(k) ? 'Vent grate, from the inside. Climb out onto a floor tile next to it.' : 'Air duct. Nobody can see you in here.');
+  if (x === P.x && y === P.y) out.push('You.');
+  if (e && visible(e)) {
+    const t = ENEMY_TYPES[e.kind];
+    const state = isCamera(e) ? (S.camLoop > 0 || e.looped > 0 ? 'looped, seeing nothing' : 'sweeping the room. If it sees you it raises the alarm and radios guards. Hack it to loop it')
+      : e.bribed ? 'bribed: looks the other way' : e.alerted ? (e.fleeing ? 'running' : 'hunting you') : e.suspicious ? 'searching for whatever it heard'
+      : isCivilian(e) ? 'working. Screams if it sees violence or a body' : 'has not seen you. Hits from behind do double damage';
+    out.push(`<b>${t.name}</b> (${e.hp}/${e.max} HP): ${state}.` + (e.hasKey && !S.hasKey ? ' Carries a keycard.' : '') + (!isCamera(e) && !e.alerted && !e.robbed ? ' Can be pickpocketed.' : '') + (canBribe(e) ? ` Takes bribes (¥${BRIBE_PRICE}).` : '') + (t.immune ? ` Immune to ${t.immune.join(', ')}.` : ''));
+  }
+  if (f) out.push({
+    desk: 'Desk with a computer. Click it from next to it to read the screen (sometimes codes or plans).',
+    cabinet: 'Filing cabinet. Click it from next to it to search.',
+    safe: f.opened ? 'An open safe.' : 'Wall safe. Needs a 4-digit code, written down somewhere on this floor.',
+    vending: 'Vending machine. Spend creds on stims, serums and gadgets, or the blinking slot.',
+    terminal: `Networked terminal. Pick a Hack half and click it from next to you: loop cameras, release keycard doors, print the floor plan or pull a fire alarm.${f.firewall ? ' Firewalled: hacks cost 1 HP.' : ''}`,
+    husk: 'Droid husk: a robot that switched itself off. Click it from next to it to read its last log.',
+    altar: f.used ? 'The altar is sated.' : `Altar. Offer ${ALTAR_PRICE} HP of blood for a random implant.`,
+    stairs: 'Fire stairs. Skip the lift: no reward, but the Head loses track of you.',
+    contact: f.used ? 'Your contact. They have nothing more for you.' : 'Someone who might be on your side. Talk from next to them.',
+    phone: f.used ? 'The line is dead.' : 'A phone, ringing. Answer it from next to it.',
+  }[f.kind] + (f.story && !f.searched ? ' <b>Something here matters.</b>' : ''));
+  if (S.grates.has(k) && !S.inDuct) out.push('Vent grate. Step into it from next to it to crawl through the air ducts (1 step).');
+  if (doorAt(x, y)) out.push(`Door (${S.doors.get(k)} HP). Lockpick it quietly, smash it, or wait for someone to open it.`);
+  if (S.keyDoors.has(k)) out.push('Keycard door. Swipe a keycard (from a carrier or their body), release it from a terminal, or short it with a Multitool.');
+  if (S.codeDoors.has(k)) out.push('Keypad door. Enter the code (find it in a desk or cabinet), or Hack it.');
+  if (S.vats.has(k)) out.push(`${S.breakable.name[0].toUpperCase() + S.breakable.name.slice(1)} (${S.vats.get(k)} HP). Smash it to get what's inside.`);
+  if (x === S.exit.x && y === S.exit.y) out.push(S.room === FLOORS.length - 1 ? 'The lift to the Head.' : 'The lift up to the next floor.');
+  if (S.loot.has(k)) out.push('A cache. Walk over it to take it.');
+  if (S.drops.has(k)) out.push('Something on the floor. Walk over it to take it.');
+  if (S.corpses.has(k)) { const c = S.corpses.get(k); out.push(c.searched ? 'A body, searched.' : 'A body. Walk onto it to search it.' + (ENEMY_TYPES[c.kind].uniform && !S.disguise ? ` You could wear their ${ENEMY_TYPES[c.kind].uniform}.` : '')); }
+  if (S.trips.has(k)) out.push('Laser tripwire. Crossing it raises the alarm. An EMP clears it.');
+  if (S.fire.has(k)) out.push('Fire. Burns whoever stands in it.');
+  else if (S.liquids.has(k)) out.push({ blood: 'Blood. Stuns arc through it.', oil: 'Oil. Burns, and gunfire sets it alight.', chem: 'Chemicals. Burn, and gunfire sets them alight.' }[S.liquids.get(k)]);
+  if (S.backrooms.has(k) && !out.length) out.push('Yellow carpet. Something is wrong with this room.');
+  return out.length ? out.join('<br>') : null;
+}
+
+function showTip(ev) {
+  const t = ev.target.closest('.tile'), tip = $('#tip');
+  const text = t && describeTile(+t.dataset.x, +t.dataset.y);
+  if (!text) { tip.hidden = true; return; }
+  if (tip.dataset.k !== t.dataset.x + ',' + t.dataset.y) { tip.innerHTML = text; tip.dataset.k = t.dataset.x + ',' + t.dataset.y; }
+  tip.hidden = false;
+  const r = tip.getBoundingClientRect();
+  tip.style.left = Math.min(ev.clientX + 16, innerWidth - r.width - 8) + 'px';
+  tip.style.top = Math.min(ev.clientY + 16, innerHeight - r.height - 8) + 'px';
+}
+
 // ---------- Input ----------
 const board = $('#board');
+board.addEventListener('mousemove', showTip);
+board.addEventListener('mouseleave', () => { $('#tip').hidden = true; });
 board.addEventListener('click', e => {
   const t = e.target.closest('.tile');
   if (t) onTileClick(+t.dataset.x, +t.dataset.y);

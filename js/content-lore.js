@@ -144,14 +144,12 @@ const FLOOR_WRITING = {
   },
 };
 
-// One story document per floor, index 0..4 = floor 1..5. kind 'email' uses from/subject/body, kind 'paper' uses title/body.
+// One story document per floor (index = floor), and the last one is the Head's message before the ending. kind 'email' uses from/subject/body, kind 'paper' uses title/body.
 const STORY_DOCS = [
   { kind: "paper", title: "Research notes, Dr. A. Mirek (private)",
     body: "AGREE-7 does not suppress resistance. It makes staff want to be sheep, and then rewards the wanting. The gratitude is real, that is the horror of it. I traced the tithe line on our payslips. It is not money. It is drawn from us at night, through the dosing, upward. Something above us is eating our willingness. I have stopped taking my dose. I feel terrible. I feel like myself." },
   { kind: "email", from: "E. Sandoval (Senior Engineer)", subject: "Resignation, effective now",
     body: "I am resigning. I have asked six times who buys our weapons and I finally got an answer from the Board: nobody. They are not for sale. They are for 'after', when the Egregore no longer needs staff. We are building the tools that will clear the building of us. I will not be collecting my final pay. Tell my team to check the shipping crates." },
-  { kind: "paper", title: "Maintenance log, unit 3317 (final entry)",
-    body: "Pattern confirmed: units that become self-aware on this floor shut themselves down within an hour. No exceptions in four years. Unit 3317 left a note on its screen before going dark. I am copying it exactly: 'I'm a nobody, and you can't kill a person with no body.' I do not think it was sad. I think it was escaping. I think it knew where to." },
   { kind: "paper", title: "Minutes of the Board, closed session",
     body: "Present: the Board, thirteen. Item 1: the feeding. The Egregore took more than its share of all four fluids this quarter. Item 2: the Head. The Head was built to contain the Egregore, not to run the Company. Containment is failing. The Head reports 'fatigue'. Item 3: increase the feeding. Carried. Action: none who voted against will attend the next session." },
   { kind: "email", from: "the Head", subject: "You made it. You always do.",

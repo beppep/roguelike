@@ -425,3 +425,33 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 .panel.body .row b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .panel.body .row b i { font-style: normal; margin-left: 4px; }
 .panel.body .row.defect { padding-top: 0; margin-top: -2px; }
+
+/* Two-halved cards: pick one half. The chosen half lights up, the other dims. */
+#hand { min-height: 176px; }
+#hand .card { height: 172px; }
+.card .half { position: relative; justify-content: center; gap: 1px; }
+.card .hname { font: 400 11px var(--type); color: #3a3226; margin-top: 3px; text-align: center; line-height: 1.1; }
+.card .or { text-align: center; font: 9px var(--mono); letter-spacing: 1px; color: #efe6cf; background: #2a251e; line-height: 13px; text-transform: uppercase; }
+#hand .card:not(.used) .half:hover { background: linear-gradient(#efe2bf, #d9c99f); }
+.card.sel .half { border-color: transparent; background: linear-gradient(#ddd4bf, #c6bba3); opacity: .45; }
+.card.sel .half.chosen { border-color: #a37d2c; background: linear-gradient(#ecd9a4, #d6bd7c); opacity: 1; }
+#hand.burning .card.sel .half { opacity: 1; }
+#hand .card .diag { margin-top: 2px; }
+.offers .card, .keep-grid .card, #modal .reward .card { height: 190px; }
+/* Hover info. */
+#tip { position: fixed; z-index: 45; max-width: 300px; pointer-events: none; background: #1d1a16; border: 1px solid #4a4339; color: var(--ink);
+  font: 12px/1.45 var(--mono); padding: 6px 9px; border-radius: 2px; box-shadow: 0 4px 14px rgba(0,0,0,.6); }
+#tip[hidden] { display: none; }
+#tip b { color: var(--gold); }
+/* Droid husks (the Foundry now builds droids too). */
+.tile.husk::before { content: ''; position: absolute; inset: 7px; border-radius: 40% 40% 20% 20%; background: linear-gradient(#5d6168, #33363b); box-shadow: inset 0 0 0 2px #6d7178, 0 2px 0 rgba(0,0,0,.5); }
+.tile.husk::after { content: ''; position: absolute; left: 50%; top: 40%; width: 8px; height: 3px; margin-left: -4px; border-radius: 1px; background: #8a3a2c; right: auto; bottom: auto; }
+.tile.husk { cursor: zoom-in; }
+/* In the hand, each half shows just its effect and its name; hover a half for the details. */
+#hand .card .sub, #hand .card .diag { display: none; }
+#hand .card .rangeicon { font-size: 13px; margin-top: 0; }
+#hand .card .half { padding: 3px 4px; }
+#hand .card .big { font-size: 13px; }
+#hand .card .hname { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+#hand .card { height: 150px; }
+#hand { min-height: 154px; }

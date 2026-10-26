@@ -14,7 +14,7 @@ function mulberry32(a) {
 // K desk with a computer and F filing cabinet (solid; search them from next door), $ loot cache,
 // L keycard door, C keypad door, S wall safe, V vending machine, T networked terminal, G vent grate (in a wall),
 // P player, X exit (the lift up), g/d/e/k/m/a enemies (ganger, drone, enforcer, cultist, golem, avatar), v clerk, c camera, n sniper, y daemon, b backroom floor, A altar, r blood circle floor,
-// Z fire stairs, Q Bazaar contact, H dream phone, w laser tripwire (floor). The air ducts are returned as rows.ducts.
+// Z fire stairs, Q Bazaar contact, H dream phone, U droid husk, w laser tripwire (floor). The air ducts are returned as rows.ducts.
 function generateFloor(f) {
   const rng = mulberry32(f.seed + (f.runSeed || 0));
   const ri = (a, b) => a + Math.floor(rng() * (b - a + 1)), pick = a => a[Math.floor(rng() * a.length)];
@@ -202,7 +202,7 @@ function generateFloor(f) {
   // A cabinet stands against a plain stretch of wall (no door beside it), and only if the room stays connected.
   const roomConnected = r => {
     const open = [];
-    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (!'#oKFSVTAZQH'.includes(g[y][x])) open.push(key(x, y));
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (!'#oKFSVTAZQHU'.includes(g[y][x])) open.push(key(x, y));
     if (!open.length) return true;
     const seenCells = new Set([open[0]]), stack = [open[0]];
     while (stack.length) {
@@ -254,6 +254,8 @@ function generateFloor(f) {
       if (!roomConnected(r)) g[p[1]][p[0]] = '.';
     }
     for (let i = 0; i < Math.floor(area / 18); i++) { const p = loneSpot(r); if (p) g[p[1]][p[0]] = 'o'; }
+    // Droid husks: robots that switched themselves off. You can read their last log.
+    if (f.husks && rng() < f.husks / rooms.length * 4) { const p = loneSpot(r); if (p) g[p[1]][p[0]] = 'U'; }
     // A wall safe, opened with a code found elsewhere on the floor.
     for (let i = 0; i < 6 && safeRooms.includes(r); i++) {
       const p = wallSpot(r);

@@ -13,50 +13,71 @@ const SHAPES = {
 };
 const SHAPE_NAMES = { arc: 'Sweep', line: 'Pierce', cone: 'Cone', ring: 'Whirl' };
 
+// You, the operative. strength = damage of Melee Attack, move = free steps every turn.
+const OPERATIVE = { name: 'Operative', strength: 3, move: 4 };
+
+// Every card has two halves. Each turn you play one card and choose ONE of its halves, and you also move.
+// A half is an action: 'self' actions need no target (heal, extra move, vanish); the rest target a tile.
+// move: 'base' means as many extra steps as your Move stat; moveBonus adds steps on top.
+const HALVES = {
+  strike:     { name: 'Melee Attack',    action: { type: 'melee', dmg: OPERATIVE.strength, str: true } },
+  sprint:     { name: 'Sprint',          action: { type: 'self', move: 'base' } },
+  lockpick:   { name: 'Lockpick',        action: { type: 'melee', dmg: 0, pick: true } },
+  hack:       { name: 'Hack',            action: { type: 'hack', range: 5 } },
+  pistol:     { name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5, silent: true } },
+  jolt:       { name: 'Neural Jolt',     action: { type: 'melee', dmg: 0, stun: 1 } },
+  shove:      { name: 'Shove',           action: { type: 'melee', dmg: 0, push: 2 } },
+  pickpocket: { name: 'Pickpocket',      action: { type: 'melee', dmg: 0, steal: true } },
+  bribe:      { name: 'Bribe',           action: { type: 'melee', dmg: 0, bribe: true } },
+  patch:      { name: 'Med-Patch',       action: { type: 'self', heal: 2 } },
+  whisper:    { name: 'Whisper',         action: { type: 'point', noise: 6, range: 7 } },
+  katana:     { name: 'Mono-Katana',     action: { type: 'melee', dmg: 4 } },
+  breach:     { name: 'Breach',          action: { type: 'melee', dmg: 0, breach: true } },
+  smartpistol:{ name: 'Smartpistol',     action: { type: 'ranged', dmg: 2, range: 4 } },
+  arc:        { name: 'Arc Blade',       action: { type: 'shape', shape: 'arc', dmg: 3 } },
+  rail:       { name: 'Rail Spike',      action: { type: 'shape', shape: 'line', dmg: 3 } },
+  emp:        { name: 'EMP Pulse',       action: { type: 'shape', shape: 'ring', dmg: 0, stun: 1 } },
+  rifle:      { name: 'Smart Rifle',     action: { type: 'ranged', dmg: 3, range: 5 } },
+  overclock:  { name: 'Overclock',       action: { type: 'self', move: 'base', moveBonus: 2 } },
+  scatter:    { name: 'Scattergun',      action: { type: 'shape', shape: 'cone', dmg: 2 } },
+  taser:      { name: 'Taser Dart',      action: { type: 'ranged', dmg: 0, stun: 1, range: 4 } },
+  nanostim:   { name: 'Nano-Stim',       action: { type: 'self', heal: 4 } },
+  ghost:      { name: 'Ghost Protocol',  action: { type: 'self', ghost: true } },
+  bloodlet:   { name: 'Bloodlet',        action: { type: 'melee', dmg: 6, cost: 2 } },
+  incinerate: { name: 'Incinerate',      action: { type: 'point', ignite: true, range: 4 } },
+};
+const card = (id, top, bottom) => ({ id, name: `${HALVES[top].name} / ${HALVES[bottom].name}`, halves: [HALVES[top], HALVES[bottom]] });
+
 // How many cards you start every floor with.
 const DECK_SIZE = 8;
 
-// Each card is one action. 'self' actions need no target: heal restores HP, move gives extra steps this turn.
-// Cards every character starts with: a stun (enemy skips its next turn and can't see), a heal,
-// a pickpocket (rob an enemy that hasn't spotted you) and a lockpick (open an adjacent door quietly).
-const SHARED_CARDS = [
-  { id: 5, name: 'Neural Jolt', action: { type: 'melee', dmg: 0, stun: 1 } },
-  { id: 6, name: 'Med-Patch',   action: { type: 'self', heal: 2 } },
-  { id: 7, name: 'Pickpocket',  action: { type: 'melee', dmg: 0, steal: true } },
-  { id: 8, name: 'Lockpick',    action: { type: 'melee', dmg: 0, pick: true } },
+// Starting deck: fighting, sneaking, opening and talking your way through, two options on every card.
+const startingDeck = () => [
+  card(1, 'strike', 'sprint'),
+  card(2, 'strike', 'lockpick'),
+  card(3, 'strike', 'hack'),
+  card(4, 'pistol', 'hack'),
+  card(5, 'jolt', 'shove'),
+  card(6, 'pickpocket', 'bribe'),
+  card(7, 'patch', 'whisper'),
+  card(8, 'lockpick', 'sprint'),
 ];
 
-// You, the operative. strength = damage of the basic Melee Attack card, move = free steps every turn.
-const OPERATIVE = { name: 'Operative', strength: 3, move: 4 };
-
-// Starting deck: 2 Melee Attacks, a silenced pistol, a sprint (a second move: your Move again) and the shared cards above.
-// move: 'base' means as many extra steps as your Move stat; moveBonus adds steps on top.
-const startingDeck = ch => [
-  ...[1, 2].map(id => ({ id, name: 'Melee Attack', action: { type: 'melee', dmg: ch.strength, str: true } })),
-  { id: 3, name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5, silent: true } },
-  { id: 4, name: 'Sprint',          action: { type: 'self', move: 'base' } },
-  ...SHARED_CARDS,
-];
-
-// After each floor you get one random card from here that you don't already own.
+// Found in loot, safes and the lift: one you don't already own.
 const REWARD_CARDS = [
-  { id: 11, name: 'Mono-Katana',  action: { type: 'melee', dmg: 4 } },
-  { id: 12, name: 'Smartpistol',  action: { type: 'ranged', dmg: 2, range: 4 } },
-  { id: 13, name: 'Arc Blade',    action: { type: 'shape', shape: 'arc', dmg: 3 } },
-  { id: 14, name: 'Rail Spike',   action: { type: 'shape', shape: 'line', dmg: 3 } },
-  { id: 15, name: 'EMP Pulse',    action: { type: 'shape', shape: 'ring', dmg: 0, stun: 1 } },
-  { id: 16, name: 'Smart Rifle',  action: { type: 'ranged', dmg: 3, range: 5 } },
-  { id: 17, name: 'Overclock',    action: { type: 'self', move: 'base', moveBonus: 2 } },
-  { id: 18, name: 'Scattergun',   action: { type: 'shape', shape: 'cone', dmg: 2 } },
-  { id: 20, name: 'Taser Dart',   action: { type: 'ranged', dmg: 0, stun: 1, range: 4 } },
-  { id: 21, name: 'Nano-Stim',    action: { type: 'self', heal: 4 } },
-  // Verbs rather than numbers: a distraction, a turn of invisibility, a push, a hole in the wall, a blood price.
-  { id: 22, name: 'Whisper',        action: { type: 'point', noise: 6, range: 7 } },
-  { id: 23, name: 'Ghost Protocol', action: { type: 'self', ghost: true } },
-  { id: 24, name: 'Shove',          action: { type: 'melee', dmg: 0, push: 2 } },
-  { id: 25, name: 'Breach',         action: { type: 'melee', dmg: 0, breach: true } },
-  { id: 26, name: 'Bloodlet',       action: { type: 'melee', dmg: 6, cost: 2 } },
-  { id: 27, name: 'Incinerate',     action: { type: 'point', ignite: true, range: 4 } },
+  card(11, 'katana', 'breach'),
+  card(12, 'smartpistol', 'sprint'),
+  card(13, 'arc', 'shove'),
+  card(14, 'rail', 'lockpick'),
+  card(15, 'emp', 'hack'),
+  card(16, 'rifle', 'whisper'),
+  card(17, 'overclock', 'patch'),
+  card(18, 'scatter', 'breach'),
+  card(19, 'taser', 'hack'),
+  card(20, 'nanostim', 'ghost'),
+  card(21, 'bloodlet', 'incinerate'),
+  card(22, 'incinerate', 'sprint'),
+  card(23, 'ghost', 'pickpocket'),
 ];
 
 // What a successful pickpocket finds (the rest of the time: nothing). A potion is one of the three below, equally likely.
@@ -94,7 +115,7 @@ const GUN_MOD_MAX = 3;
 const gunBonus = s => s.type === 'ranged' && s.dmg > 0 ? run.gunMods : 0;
 
 // Floors (0-based) whose exit is locked until you take the keycard from the enemy carrying it.
-const KEYCARD_FLOORS = new Set([1, 2, 3]);
+const KEYCARD_FLOORS = new Set([1, 2]);
 
 // Hitting an enemy that hasn't spotted you multiplies the damage.
 const BACKSTAB_MULT = 2;
@@ -136,7 +157,8 @@ const ENEMY_TYPES = {
   c: { name: 'Camera', glyph: '◉', hp: 2, color: '#8a8172', vision: 6, patrol: 0, camera: true, machine: true, intents: [] },
 };
 
-// The corporate tower: four generated floors. The lift from the last one goes to the Head (the ending; a boss floor
+// The corporate tower: three generated floors (the droid floor's drones, snipers, husks and backrooms now live
+// on the Foundry). The lift from the last one goes to the Head (the ending; a boss floor
 // may come later). Each floor is one rectangular office building: a grid of
 // two-wide corridors, with the blocks between them cut into rooms by walls one tile thick. Each run adds its own number to
 // the seed, so a floor keeps its layout for the whole run (restarts included) but changes between runs. vCorridors = north-south corridors crossing the east-west
@@ -150,9 +172,7 @@ const FLOORS = [
   { name: 'Pharma Labs',     theme: 'pharma',  cache: 'a medicine cabinet', seed: 1101, w: 40, h: 28, vCorridors: 2,
     extraDoors: 0.3, enemyChance: 0.35, lootChance: 0.6, guards: 1, cameras: 1, civilians: 5, mix: 'ggd',   loot: { card: 0.15, creds: 0.25, potion: 0.6 } },
   { name: 'Weapons Foundry', theme: 'weapons', cache: 'a weapons locker',   seed: 2202, w: 46, h: 30, vCorridors: 2,
-    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, cameras: 3, civilians: 3, mix: 'gggden', loot: { card: 0.35, creds: 0.4, potion: 0.25 } },
-  { name: 'Droid Assembly',  theme: 'droids',  cache: 'a parts bin',        seed: 3303, w: 50, h: 34, vCorridors: 3,
-    extraDoors: 0.3, enemyChance: 0.35, lootChance: 0.45, guards: 2, cameras: 4, civilians: 2, mix: 'gdddeen', backrooms: 1, loot: { card: 0.2, creds: 0.45, potion: 0.35 } },
+    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, cameras: 4, civilians: 3, mix: 'ggddden', backrooms: 1, husks: 4, loot: { card: 0.35, creds: 0.4, potion: 0.25 } },
   { name: 'Meatology',       theme: 'flesh',   cache: 'a reliquary',        seed: 4404, w: 50, h: 34, vCorridors: 3,
     extraDoors: 0.35, enemyChance: 0.4, lootChance: 0.45, guards: 2, cameras: 2, mix: 'kkkmgy', backrooms: 2, altars: 2, loot: { card: 0.25, creds: 0.3, potion: 0.45 } },
 ];
@@ -172,7 +192,7 @@ const GEAR = {
   thiefgloves: { slot: 'Gloves', name: "Thief's Gloves",  text: 'Pickpocketing always finds something.' },
   visor:       { slot: 'Mask',   name: 'Optic Visor',     text: '+3 sight radius.' },
   corpmask:    { slot: 'Mask',   name: 'Corporate Mask',  text: 'Cameras ignore you until you hurt someone on that floor.' },
-  jammer:      { slot: 'Tool',   name: 'Signal Jammer',   text: 'Hacks cost 1 less Energy.' },
+  jammer:      { slot: 'Tool',   name: 'Signal Jammer',   text: 'Your hacks are never traced.' },
   multitool:   { slot: 'Tool',   name: 'Multitool',       text: 'Short out a keycard reader to open its door without a keycard. Loud, and the alarm rises.' },
 };
 const GEAR_SLOTS = ['Boots', 'Armour', 'Gloves', 'Mask', 'Tool'];
@@ -196,7 +216,7 @@ const IMPLANTS = {
   plating:   { part: 'skin',  name: 'Subdermal Plating',    text: 'The first hit you take each round deals 1 less.' },
   echo:      { part: 'ears',  name: 'Echolocator',          text: 'You see people through walls within 5 tiles.' },
   autophage: { part: 'gut',   name: 'Autophage Gland',      text: 'Searching a body also feeds you from it: heal 3.' },
-  spinaltap: { part: 'spine', name: 'Spinal Tap',           text: '+2 Energy, and your first hack on each floor is free.' },
+  spinaltap: { part: 'spine', name: 'Spinal Tap',           text: 'Hack terminals and keypad doors from up to 3 tiles away.' },
   compressed:{ part: 'skull', name: 'Compressed Head',      text: 'In the air ducts every step goes twice as far.' },
   chameleon: { part: 'skin',  name: 'Dermal Chameleon',     text: 'End a turn without moving and nobody who hasn\'t spotted you can see you (except from right next to you) until your next turn.' },
 };
@@ -209,15 +229,16 @@ const DEFECTS = {
 // Chance an opened safe also holds an implant you can install on the spot.
 const SAFE_IMPLANT_CHANCE = 0.5;
 
-// ---------- Energy and hacking ----------
-// Energy powers hacks. Full at the start of every floor; resting gives 1 back.
-const ENERGY_MAX = 3;
+// ---------- Hacking ----------
+// The Hack half works on a networked terminal or a keypad door next to you (Spinal Tap: up to 3 tiles away, in
+// sight), or on a camera you can see within 5 tiles. A terminal offers one of these hacks per Hack card.
+const HACK_REACH = 1, HACK_REACH_TAP = 3;
 const CAMERA_LOOP_ROUNDS = 5;
 const HACKS = [
-  { id: 'loop',  name: 'Loop the cameras',       cost: 2, text: `Every camera on the floor shows old footage for ${CAMERA_LOOP_ROUNDS} rounds.` },
-  { id: 'doors', name: 'Release the lift doors', cost: 2, text: 'Unlocks every keycard door on this floor.' },
-  { id: 'plan',  name: 'Print the floor plan',   cost: 1, text: 'The whole layout goes on your map.' },
-  { id: 'fire',  name: 'Pull a fire alarm',      cost: 1, text: 'A bell rings far from you. Everyone who hears it goes to look.' },
+  { id: 'loop',  name: 'Loop the cameras', text: `Every camera on the floor shows old footage for ${CAMERA_LOOP_ROUNDS} rounds.` },
+  { id: 'doors', name: 'Release the lift doors', text: 'Unlocks every keycard door on this floor.' },
+  { id: 'plan',  name: 'Print the floor plan', text: 'The whole layout goes on your map.' },
+  { id: 'fire',  name: 'Pull a fire alarm', text: 'A bell rings far from you. Everyone who hears it goes to look.' },
 ];
 
 // ---------- Gadgets ----------
@@ -228,7 +249,6 @@ const GADGETS = {
   fire:    { name: 'Incendiary',    price: 18, throw: 5, radius: 1, text: 'Sets everything within 1 tile on fire. Oil and chemicals carry it further.' },
   noise:   { name: 'Noise maker',   price: 8,  throw: 7, text: 'Rattles where it lands: everyone in earshot goes to look.' },
   breach:  { name: 'Breach charge', price: 20, throw: 1, text: 'Blows a hole in a wall (or door) next to you. Very loud.' },
-  battery: { name: 'Battery',       price: 10, text: '+2 Energy.' },
   ld50:    { name: 'LD-50-emon',    price: 25, text: 'Heals you fully. Leaves one new habit that is not yours: a random defect.' },
 };
 // Chance that loot which would have been a potion is a gadget instead.
@@ -276,9 +296,9 @@ const ALTAR_PRICE = 3;
 const DISGUISE_RANGE = 2;
 
 // ---------- Traps ----------
-// Laser tripwires ('w') across corridors on floors 2, 3 and 5: crossing one raises the alarm and makes noise.
+// Laser tripwires ('w') across corridors on floors 2 and 3: crossing one raises the alarm and makes noise.
 // An EMP clears them; you can also simply walk around. Once seen, your moves route around them.
-const TRIPWIRES = [0, 3, 3, 0, 2];
+const TRIPWIRES = [0, 3, 1];
 
 // Each hack has this chance to be traced by the Head's ICE (alarm +1). A Signal Jammer stops traces.
 const TRACE_CHANCE = 0.2;

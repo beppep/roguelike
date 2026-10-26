@@ -1115,7 +1115,8 @@ function useSelf() {
 }
 
 // Something this card can affect on that tile: an enemy, a door, or a breakable vat.
-const hasTarget = (s, t) => s.type === 'hack' ? !!hackTargetAt(t.x, t.y) : s.bribe ? !!(enemyAt(t.x, t.y) && canBribe(enemyAt(t.x, t.y))) : (s.type === 'point' && !isWall(t.x, t.y)) || (s.breach && breakableWall(t.x, t.y)) || (s.push && enemyAt(t.x, t.y)) || (!s.pick && !s.breach && enemyAt(t.x, t.y)) || (canHitDoor(s) && doorAt(t.x, t.y)) || (s.dmg > 0 && smashable(t.x, t.y));
+const hasTarget = (s, t) => s.type === 'hack' ? !!hackTargetAt(t.x, t.y) : s.bribe ? !!(enemyAt(t.x, t.y) && canBribe(enemyAt(t.x, t.y)))
+  : s.steal ? !!(enemyAt(t.x, t.y) && canRob(enemyAt(t.x, t.y))) : (s.type === 'point' && !isWall(t.x, t.y)) || (s.breach && breakableWall(t.x, t.y)) || (s.push && enemyAt(t.x, t.y)) || (!s.pick && !s.breach && enemyAt(t.x, t.y)) || (canHitDoor(s) && doorAt(t.x, t.y)) || (s.dmg > 0 && smashable(t.x, t.y));
 
 function structureKind(x, y) {
   const k = key(x, y);
@@ -1142,6 +1143,65 @@ function attackHit(s, x, y) {
   return hit.some(t => hasTarget(s, t)) ? hit : null;
 }
 
+// ---------- Why can't I? ----------
+const canRob = e => !isCamera(e) && !e.alerted && !e.robbed;
+
+// What's on a tile, in words (for the messages below), or null for open floor.
+function thingAt(x, y) {
+  const k = key(x, y), e = enemyAt(x, y), f = S.furn.get(k);
+  if (e && (visible(e) || manh(e, S.player) === 1)) return ENEMY_TYPES[e.kind].name.toLowerCase();
+  if (f) return { desk: 'desk', cabinet: 'cabinet', safe: 'safe', vending: 'vending machine', terminal: 'terminal', altar: 'altar', stairs: 'stairwell door', contact: 'person', phone: 'phone' }[f.kind] || f.kind;
+  if (doorAt(x, y)) return 'door';
+  if (S.keyDoors.has(k)) return 'keycard door';
+  if (S.codeDoors.has(k)) return 'keypad door';
+  if (S.trips.has(k)) return 'laser';
+  if (S.grates.has(k)) return 'vent grate';
+  if (isWall(x, y)) return 'wall';
+  return null;
+}
+
+// The reason the picked half can't be used on (x, y).
+function whyNot(s, x, y) {
+  const k = key(x, y), e = enemyAt(x, y), thing = thingAt(x, y), d = manh(S.player, { x, y }), close = d === 1;
+  const the = thing ? 'the ' + thing : '';
+  if (s.type === 'hack') {
+    if (!thing) return 'Nothing to hack there.';
+    if (!close) return `Get next to ${the} to hack it.`;
+    if (e && ENEMY_TYPES[e.kind].machine && e.alerted) return `The ${thing} has spotted you. Hack machines before they notice you.`;
+    if (e && e.ally > 0) return `The ${thing} is already yours.`;
+    if (e && isCamera(e)) return 'That camera is already looped.';
+    if (e) return `You can't hack a ${thing}. People take bribes, not code.`;
+    return `You can't hack a ${thing}.`;
+  }
+  if (s.bribe) {
+    if (!e || isCamera(e)) return thing ? `You can't bribe a ${thing}.` : 'Nobody there to bribe.';
+    if (!close) return `Get next to ${the} to bribe them.`;
+    if (e.bribed) return `The ${thing} is already bribed.`;
+    if (e.alerted) return `The ${thing} has seen you. Nobody takes a bribe from someone they're hunting.`;
+    return `${ENEMY_TYPES[e.kind].name}s don't take bribes.`;
+  }
+  if (s.steal) {
+    if (!e) return thing ? `There's nothing to steal from a ${thing}.` : 'Nobody there to rob.';
+    if (!close) return `Get next to ${the} to pick their pocket.`;
+    if (isCamera(e)) return 'A camera has no pockets.';
+    if (e.robbed) return `You already robbed the ${thing}.`;
+    if (e.alerted) return `The ${thing} is watching you. Pockets only work on people who haven't spotted you.`;
+  }
+  if (s.pick) {
+    if (S.keyDoors.has(k)) return "Lockpicks don't work on keycard doors. Find a keycard, release it from a terminal, or smash it.";
+    if (S.codeDoors.has(k)) return 'A keypad door: enter its code, or Hack it.';
+    if (doorAt(x, y) && !close) return 'Get next to the door to pick it.';
+    return thing ? `There's no lock to pick on a ${thing}.` : 'Nothing to pick there.';
+  }
+  if (s.push) return e ? (close ? `The ${thing} can't be shoved.` : `Get next to ${the} to shove them.`) : 'Nobody there to shove.';
+  if (s.breach) return !close ? 'Get next to the wall or door you want to blow.' : thing === 'wall' ? "That's an outer wall. It won't break." : `Breach needs a wall or a door${thing ? `, not a ${thing}` : ''}.`;
+  if (s.type === 'self') return '';
+  if (thing === 'wall' && !breakableWall(x, y)) return "That's an outer wall. It won't break.";
+  if (thing === 'stairwell door' || thing === 'person' || thing === 'vent grate') return `You can't break the ${thing}.`;
+  if (thing) return s.type === 'melee' ? `Get next to ${the} to hit it.` : `Out of reach, or no clear line to ${the}.`;
+  return 'Nothing to hit there.';
+}
+
 // ---------- Player actions ----------
 // A click on the board uses the picked card if it lands on something the card can hit; otherwise it moves.
 async function onTileClick(x, y) {
@@ -1149,7 +1209,12 @@ async function onTileClick(x, y) {
   const a = S.act, P = S.player;
   if (S.throwing) return throwAt(x, y);
   if (S.inDuct) return ductClick(x, y);
-  if (a.atk && !a.atkUsed && (a.atk.type === 'hack' || a.atk.bribe || (a.atk.dmg > 0 && structureKind(x, y)))) { const hit = attackHit(a.atk, x, y); if (hit) return useAttack(hit); }
+  if (a.atk && !a.atkUsed && (a.atk.type === 'hack' || a.atk.bribe || a.atk.steal || (a.atk.dmg > 0 && structureKind(x, y)))) {
+    const hit = attackHit(a.atk, x, y);
+    if (hit) return useAttack(hit);
+    const t = thingAt(x, y);
+    if (t && (a.atk.type === 'hack' || ((a.atk.bribe || a.atk.steal) && enemyAt(x, y)))) { toast(whyNot(a.atk, x, y)); return; }
+  }
   if (S.furn.has(key(x, y))) return searchFurniture(x, y);
   if (S.grates.has(key(x, y))) return enterDuct(x, y);
   if (S.keyDoors.has(key(x, y))) return swipeKeycard(x, y);
@@ -1166,7 +1231,7 @@ async function onTileClick(x, y) {
     if (!dist.has(key(x, y))) { S.tripOk = true; ({ dist, prev } = moveReach(a.move)); }
     S.tripOk = false;
     if (!dist.has(key(x, y)) || (x === P.x && y === P.y)) {
-      if (a.atk && !a.atkUsed && atkTiles(a.atk, P).some(t => t.x === x && t.y === y)) toast('Nothing to hit there.');
+      if (a.atk && !a.atkUsed && a.atk.type !== 'self' && (thingAt(x, y) || atkTiles(a.atk, P).some(t => t.x === x && t.y === y))) toast(whyNot(a.atk, x, y));
       return;
     }
     S.busy = true; renderOverlays();
@@ -1182,7 +1247,7 @@ async function onTileClick(x, y) {
       return roomCleared();
     }
     nextAction();
-  }
+  } else if (a.atk && !a.atkUsed && a.atk.type !== 'self') toast(whyNot(a.atk, x, y));
 }
 
 async function useAttack(hit) {

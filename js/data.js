@@ -25,8 +25,8 @@ const HALVES = {
   lockpick:   { name: 'Lockpick',        action: { type: 'melee', dmg: 0, pick: true } },
   hack:       { name: 'Hack',            action: { type: 'hack', range: 5 } },
   pistol:     { name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5, silent: true } },
-  jolt:       { name: 'Neural Jolt',     action: { type: 'melee', dmg: 0, stun: 1 } },
-  shove:      { name: 'Shove',           action: { type: 'melee', dmg: 0, push: 2 } },
+  // Shock Shove: push someone next to you 2 tiles and stun them for a turn; slamming into something does 2 damage.
+  shove:      { name: 'Shock Shove',     action: { type: 'melee', dmg: 0, push: 2, stun: 1 } },
   pickpocket: { name: 'Pickpocket',      action: { type: 'melee', dmg: 0, steal: true } },
   bribe:      { name: 'Bribe',           action: { type: 'melee', dmg: 0, bribe: true } },
   patch:      { name: 'Med-Patch',       action: { type: 'self', heal: 2 } },
@@ -40,7 +40,8 @@ const HALVES = {
   rifle:      { name: 'Smart Rifle',     action: { type: 'ranged', dmg: 3, range: 5 } },
   overclock:  { name: 'Overclock',       action: { type: 'self', move: 'base', moveBonus: 2 } },
   scatter:    { name: 'Scattergun',      action: { type: 'shape', shape: 'cone', dmg: 2 } },
-  taser:      { name: 'Taser Dart',      action: { type: 'ranged', dmg: 0, stun: 1, range: 4 } },
+  // Tranq Dart: puts someone to sleep for 3 turns (they skip their turns and see nothing).
+  taser:      { name: 'Tranq Dart',      action: { type: 'ranged', dmg: 0, stun: 3, range: 4 } },
   nanostim:   { name: 'Nano-Stim',       action: { type: 'self', heal: 4 } },
   ghost:      { name: 'Ghost Protocol',  action: { type: 'self', ghost: true } },
   bloodlet:   { name: 'Bloodlet',        action: { type: 'melee', dmg: 6, cost: 2 } },
@@ -57,9 +58,9 @@ const startingDeck = () => [
   card(2, 'strike', 'lockpick'),
   card(3, 'strike', 'hack'),
   card(4, 'pistol', 'hack'),
-  card(5, 'jolt', 'shove'),
+  card(5, 'shove', 'whisper'),
   card(6, 'pickpocket', 'bribe'),
-  card(7, 'patch', 'whisper'),
+  card(7, 'patch', 'sprint'),
   card(8, 'lockpick', 'sprint'),
 ];
 

@@ -2253,7 +2253,7 @@ function drawMinimap() {
 function render() { renderUnits(); renderOverlays(); renderSide(); renderBar(); renderHand(); updateCamera(); }
 
 function intentHTML(e) {
-  if (e.stunned) return '<span class="stun">Stunned</span>';
+  if (e.stunned) return `<span class="stun">${e.stunned > 1 ? `Asleep ${e.stunned} turns` : 'Stunned'}</span>`;
   if (isCamera(e) && (S.camLoop > 0 || e.looped > 0)) return '<span class="stun">Looped</span>';
   if (isCamera(e)) return e.tracking ? '<span class="a">Tracking</span>' : '<span class="idle">Watching</span>';
   if (e.alerted && e.fleeing) return `<span class="sus">${isCivilian(e) ? 'Screaming' : 'Fleeing'}</span>`;

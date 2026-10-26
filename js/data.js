@@ -179,24 +179,33 @@ const GEAR = {
 const GEAR_SLOTS = ['Boots', 'Armour', 'Gloves', 'Mask', 'Tool'];
 
 // ---------- Implants ----------
-// Strong new rules, installed in the lift or found in safes. Each one costs a point of Humanity; once you have more
-// than IMPLANT_SAFE_COUNT implants, every further one also installs a random defect.
-const HUMANITY = 5;
+// Strong new rules, installed in the lift, found in safes or grown at altars. Each one goes into a part of your body,
+// one implant per part: a new one in an occupied part replaces the old one. Once you carry more than
+// IMPLANT_SAFE_COUNT implants, every further one also installs a random defect, which settles in its own part.
 const IMPLANT_SAFE_COUNT = 3;
+// Body parts, with where their marker sits on the side panel's body diagram (viewBox 0 0 100 160).
+const BODY_PARTS = [
+  { id: 'brain', name: 'Brain', x: 50, y: 14 },
+  { id: 'skull', name: 'Skull', x: 38, y: 27 },
+  { id: 'ears',  name: 'Ears',  x: 63, y: 24 },
+  { id: 'spine', name: 'Spine', x: 50, y: 62 },
+  { id: 'skin',  name: 'Skin',  x: 27, y: 74 },
+  { id: 'gut',   name: 'Gut',   x: 57, y: 88 },
+];
 const IMPLANTS = {
-  accel:     { name: 'Synaptic Accelerator', text: 'Once per floor, Overdrive: play a second card in the same turn.' },
-  plating:   { name: 'Subdermal Plating',    text: 'The first hit you take each round deals 1 less.' },
-  echo:      { name: 'Echolocator',          text: 'You see people through walls within 5 tiles.' },
-  autophage: { name: 'Autophage Gland',      text: 'Searching a body also feeds you from it: heal 3.' },
-  spinaltap: { name: 'Spinal Tap',           text: '+2 Energy, and your first hack on each floor is free.' },
-  compressed:{ name: 'Compressed Head',      text: 'In the air ducts every step goes twice as far.' },
-  chameleon: { name: 'Dermal Chameleon',     text: 'End a turn without moving and nobody who hasn\'t spotted you can see you (except from right next to you) until your next turn.' },
+  accel:     { part: 'brain', name: 'Synaptic Accelerator', text: 'Once per floor, Overdrive: play a second card in the same turn.' },
+  plating:   { part: 'skin',  name: 'Subdermal Plating',    text: 'The first hit you take each round deals 1 less.' },
+  echo:      { part: 'ears',  name: 'Echolocator',          text: 'You see people through walls within 5 tiles.' },
+  autophage: { part: 'gut',   name: 'Autophage Gland',      text: 'Searching a body also feeds you from it: heal 3.' },
+  spinaltap: { part: 'spine', name: 'Spinal Tap',           text: '+2 Energy, and your first hack on each floor is free.' },
+  compressed:{ part: 'skull', name: 'Compressed Head',      text: 'In the air ducts every step goes twice as far.' },
+  chameleon: { part: 'skin',  name: 'Dermal Chameleon',     text: 'End a turn without moving and nobody who hasn\'t spotted you can see you (except from right next to you) until your next turn.' },
 };
 const DEFECTS = {
-  misfire:    { name: 'Misfire',       text: 'One random card starts every floor already used.' },
-  spinal:     { name: 'Spinal Defect', text: '-1 Move.' },
-  deathdrive: { name: 'Death Drive',   text: 'Resting costs 1 HP.' },
-  feedback:   { name: 'Feedback',      text: 'Cameras see 2 tiles further.' },
+  misfire:    { part: 'brain', name: 'Misfire',       text: 'One random card starts every floor already used.' },
+  spinal:     { part: 'spine', name: 'Spinal Defect', text: '-1 Move.' },
+  deathdrive: { part: 'gut',   name: 'Death Drive',   text: 'Resting costs 1 HP.' },
+  feedback:   { part: 'ears',  name: 'Feedback',      text: 'Cameras see 2 tiles further.' },
 };
 // Chance an opened safe also holds an implant you can install on the spot.
 const SAFE_IMPLANT_CHANCE = 0.5;

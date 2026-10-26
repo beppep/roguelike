@@ -383,9 +383,9 @@ function searchFurniture(x, y) {
   }
   if (f.kind === 'altar') {
     if (f.used) return toast('The altar is sated.');
-    const left = run.implants.length < HUMANITY ? Object.keys(IMPLANTS).filter(id => !hasImplant(id)).length : 0;
+    const left = Object.keys(IMPLANTS).filter(id => !hasImplant(id)).length;
     S.altar = f;
-    return showModal('Altar', `Old stone, newer stains. A brass plate: <i>WHAT IS OWED IS PAID.</i> Offer ${ALTAR_PRICE} HP of blood and something will grow in you: a random implant (it costs Humanity as usual).${implantWarn()}`,
+    return showModal('Altar', `Old stone, newer stains. A brass plate: <i>WHAT IS OWED IS PAID.</i> Offer ${ALTAR_PRICE} HP of blood and something will grow in you: a random implant, in whatever part of you it chooses.${implantWarn()}`,
       left && S.player.hp > ALTAR_PRICE ? [['offer', 'Offer blood'], ['closeread', 'Step back']] : [['closeread', 'Step back']]);
   }
   let html;
@@ -702,9 +702,9 @@ function enterCode() {
     log('The safe clicks open.');
     giveLoot('card', kp, 'from the safe', '');
     const imp = Object.keys(IMPLANTS).filter(id => !hasImplant(id));
-    if (imp.length && run.implants.length < HUMANITY && Math.random() < SAFE_IMPLANT_CHANCE) {
+    if (imp.length && Math.random() < SAFE_IMPLANT_CHANCE) {
       const id = imp[Math.floor(Math.random() * imp.length)];
-      setTimeout(() => showModal('An implant in the safe', `Sealed in a sterile case: <b>${IMPLANTS[id].name}</b>. ${IMPLANTS[id].text} It costs 1 Humanity.${implantWarn()}`,
+      setTimeout(() => showModal('An implant in the safe', `Sealed in a sterile case: <b>${IMPLANTS[id].name}</b>. ${IMPLANTS[id].text} It goes in your ${partName(IMPLANTS[id].part)}.${implantWarn(id)}`,
         [['install-' + id, 'Install it'], ['closeread', 'Leave it']]), 0);
     }
     giveLoot('creds', kp, 'from the safe', '');
@@ -1866,7 +1866,7 @@ function liftOffers() {
   const cards = REWARD_CARDS.filter(c => !owned.has(c.id)).sort(() => Math.random() - 0.5).slice(0, 1).map(card => ({ kind: 'card', card }));
   const gear = rnd(Object.keys(GEAR).filter(id => !hasGear(id)));
   if (gear) cards.push({ kind: 'gear', id: gear });
-  const imp = run.implants.length < HUMANITY && rnd(Object.keys(IMPLANTS).filter(id => !hasImplant(id)));
+  const imp = rnd(Object.keys(IMPLANTS).filter(id => !hasImplant(id)));
   if (imp) cards.push({ kind: 'implant', id: imp });
   const supplies = [
     { kind: 'stims', n: 2, name: 'Med kit', text: '2 healing stims' },
@@ -1886,7 +1886,7 @@ function offerHTML(o, i) {
   }
   if (o.kind === 'implant') {
     const m = IMPLANTS[o.id];
-    return `<div class="card offer item implant" data-act="take-${i}"><div class="half"><div class="kind">Implant · −1 Humanity</div><p>${m.text}${implantWarn()}</p></div><div class="name">${m.name}</div></div>`;
+    return `<div class="card offer item implant" data-act="take-${i}"><div class="half"><div class="kind">Implant · ${partName(m.part)}</div><p>${m.text}${implantWarn(o.id)}</p></div><div class="name">${m.name}</div></div>`;
   }
   return `<div class="card offer supply" data-act="take-${i}"><div class="half"><div class="big heal">${o.text}</div><div class="sub">Supplies</div></div><div class="name">${o.name}</div></div>`;
 }
@@ -1926,16 +1926,26 @@ function takeOffer(i) {
 
 // Installs an implant. Past IMPLANT_SAFE_COUNT implants each one also brings a random defect.
 function installImplant(id) {
+  const old = implantIn(IMPLANTS[id].part), grew = !old;
+  if (old) { run.implants = run.implants.filter(x => x !== old); run.notes.push(`You pull the <b>${IMPLANTS[old].name}</b> out of your ${partName(IMPLANTS[id].part)} to make room.`); }
   run.implants.push(id);
-  run.notes.push(`Installed <b>${IMPLANTS[id].name}</b>: ${IMPLANTS[id].text}`);
-  if (run.implants.length > IMPLANT_SAFE_COUNT) {
+  run.notes.push(`Installed <b>${IMPLANTS[id].name}</b> in your ${partName(IMPLANTS[id].part)}: ${IMPLANTS[id].text}`);
+  if (grew && run.implants.length > IMPLANT_SAFE_COUNT) {
     const pool = Object.keys(DEFECTS).filter(d => !hasDefect(d));
     const d = pool[Math.floor(Math.random() * pool.length)];
-    if (d) { run.defects.push(d); run.notes.push(`<b>Defect: ${DEFECTS[d].name}</b>. ${DEFECTS[d].text} Your body is running out of room for you.`); }
+    if (d) { run.defects.push(d); run.notes.push(`<b>Defect in your ${partName(DEFECTS[d].part)}: ${DEFECTS[d].name}</b>. ${DEFECTS[d].text} Your body is running out of room for you.`); }
   }
 }
 
-const implantWarn = () => run.implants.length >= IMPLANT_SAFE_COUNT ? ' <b class="lost">Brings a random defect.</b>' : '';
+const implantIn = part => run.implants.find(x => IMPLANTS[x].part === part);
+const partName = part => BODY_PARTS.find(p => p.id === part).name.toLowerCase();
+// What installing this implant would do besides its own rule: replace one, or bring a defect.
+const implantWarn = id => {
+  if (!id) return run.implants.length >= IMPLANT_SAFE_COUNT ? ' <b class="lost">If it goes into an empty part, it brings a random defect.</b>' : '';
+  const old = implantIn(IMPLANTS[id].part);
+  if (old) return ` Replaces your ${IMPLANTS[old].name}.`;
+  return run.implants.length >= IMPLANT_SAFE_COUNT ? ' <b class="lost">Brings a random defect.</b>' : '';
+};
 
 function offerBlood() {
   const f = S.altar, pool = Object.keys(IMPLANTS).filter(id => !hasImplant(id));
@@ -2045,7 +2055,7 @@ function showHowTo() {
     (<i>? Searching</i>). Getting spotted raises the <b>alarm</b>: at 3 patrols speed up, and at 5 reinforcements arrive.
     Hitting someone who hasn't seen you does double damage.</p>
     <p><b>Between floors</b> the lift tells you how the Head saw your play, and how it will answer. Take a card, gear or an implant.
-    Implants cost Humanity. Past three, they bring defects.</p>
+    Implants go into parts of your body, one per part. Past three, they bring defects.</p>
     <p><b>Read.</b> Each floor hides one document that matters, in a desk or cabinet with a faint gold rim.</p></div>`);
   $('#modal .box').classList.add('wide');
 }
@@ -2302,6 +2312,26 @@ function renderOverlays() {
   renderDucts(new Set([...cls].filter(([, c]) => c === 'reach').map(([k]) => k)));
 }
 
+// Your body: a silhouette with a marker on each part that can hold an implant. Gold = implant, red ring = defect.
+// Hover a marker or a row to read what it does.
+function bodyHTML() {
+  const defectIn = part => run.defects.find(x => DEFECTS[x].part === part);
+  const tip = p => { const i = implantIn(p.id), d = defectIn(p.id); return [p.name + ':', i ? `${IMPLANTS[i].name}. ${IMPLANTS[i].text}` : 'empty.', d ? `Defect: ${DEFECTS[d].name}. ${DEFECTS[d].text}` : ''].join(' ').trim(); };
+  const marks = BODY_PARTS.map(p => `<g class="part ${implantIn(p.id) ? 'full' : ''} ${defectIn(p.id) ? 'bad' : ''}"><title>${tip(p)}</title><circle cx="${p.x}" cy="${p.y}" r="5.5"/></g>`).join('');
+  const rows = BODY_PARTS.map(p => { const i = implantIn(p.id), d = defectIn(p.id);
+    return `<div class="row" title="${tip(p)}"><span>${p.name}</span><b class="${i ? '' : 'empty'}">${i ? IMPLANTS[i].name : '—'}</b></div>` +
+      (d ? `<div class="row defect" title="${tip(p)}"><span></span><b class="lost">${DEFECTS[d].name}</b></div>` : ''); }).join('');
+  return `<div class="panel body">
+    <svg class="figure" viewBox="0 0 100 160" aria-label="Your body and its implants">
+      <g class="sil"><circle cx="50" cy="20" r="14"/><rect x="44" y="33" width="12" height="8"/>
+        <path d="M28 42h44l6 52h-12l-2 64h-11l-3-44-3 44h-11l-2-64h-12z"/><path d="M28 42l-10 46 7 2 9-36zM72 42l10 46-7 2-9-36z"/></g>
+      <line class="spine" x1="50" y1="36" x2="50" y2="92"/>
+      ${marks}
+    </svg>
+    <div class="parts">${rows}</div>
+  </div>`;
+}
+
 function renderSide() {
   const P = S.player, hp = Math.max(0, P.hp);
   const canUseItem = S.phase === 'turn' && !S.busy;
@@ -2331,11 +2361,9 @@ function renderSide() {
       <div class="note">Each turn: play one card and move up to ${moveStat()}. Used cards go dark. Resting takes a turn: you burn one card for good and the rest come back.</div>
       <div class="note"><span class="key seen"></span>Seen now <span class="key next"></span>Seen on their next move</div>
     </div>
-    ${Object.keys(run.gear).length || run.implants.length ? `<div class="panel loadout">
-      <div class="row"><span>Humanity</span><b>${HUMANITY - run.implants.length} / ${HUMANITY}</b></div>
+    ${bodyHTML()}
+    ${Object.keys(run.gear).length ? `<div class="panel loadout">
       ${GEAR_SLOTS.filter(sl => run.gear[sl]).map(sl => `<div class="row" title="${GEAR[run.gear[sl]].text}"><span>${sl}</span><b>${GEAR[run.gear[sl]].name}</b></div>`).join('')}
-      ${run.implants.map(id => `<div class="row" title="${IMPLANTS[id].text}"><span>Implant</span><b>${IMPLANTS[id].name}</b></div>`).join('')}
-      ${run.defects.map(id => `<div class="row" title="${DEFECTS[id].text}"><span>Defect</span><b class="lost">${DEFECTS[id].name}</b></div>`).join('')}
     </div>` : ''}
     <div class="panel log">${S.log.slice(-10).map(l => `<div>${l}</div>`).join('')}</div>`;
   drawMinimap();

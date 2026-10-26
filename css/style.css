@@ -455,3 +455,19 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 #hand .card .hname { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
 #hand .card { height: 150px; }
 #hand { min-height: 154px; }
+
+/* The hand as a fan of cards. Hovering lifts a card; the one being played stays raised. */
+#hand { align-items: flex-end; gap: 2px; padding: 6px 4px 10px; }
+#hand .card { transform-origin: 50% 120%; transform: translateY(var(--drop, 0)) rotate(var(--rot, 0deg)); }
+#hand .card:not(.used):hover, #hand .card.sel { transform: translateY(calc(var(--drop, 0px) - 12px)) rotate(var(--rot, 0deg)); z-index: 2; }
+#hand.done .card:hover, #hand .card.used:hover { transform: translateY(var(--drop, 0)) rotate(var(--rot, 0deg)); }
+/* Used cards are dark; once this turn's card is played, the rest fade lightly: time to end the turn. */
+#hand.done .card:not(.used) { opacity: .7; filter: saturate(.6); }
+#hand.done .card.used { opacity: 1; }
+
+/* Dragging the map. */
+#viewport { cursor: grab; }
+#board.dragging { transition: none; cursor: grabbing; }
+#center { position: absolute; right: 8px; top: 8px; z-index: 5; padding: 4px 10px; font-size: 12px; opacity: .8; }
+#center:hover { opacity: 1; }
+#hand { padding-left: 16px; padding-right: 16px; }

@@ -842,7 +842,6 @@ function loadRoom(idx) {
   if (hasEcho('plan')) S.planned = true;
   if (hasEcho('deja')) { const c = [...S.furn.values()].find(f => f.clue && f.clue.kind === 'code'); if (c) S.codes.push({ label: c.clue.label, code: c.clue.code }); }
   buildBoard();
-  log(`Corporate Tower, floor ${idx + 1}: <b>${FLOORS[idx].name}</b>. ${S.enemies.filter(isHostile).length} hostiles${S.enemies.some(isCivilian) ? `, ${S.enemies.filter(isCivilian).length} staff` : ''}${S.enemies.some(isCamera) ? `, ${S.enemies.filter(isCamera).length} camera${S.enemies.filter(isCamera).length > 1 ? 's' : ''}` : ''}. Find the exit.`);
   run.notes.splice(0).forEach(log);
   if (S.adapt) log(`<i>The Head: ${CORP_AI_RESPONSES[S.adapt]}</i>`);
   if (S.needKey) log(`The lift is behind keycard doors. ${S.enemies.filter(e => e.hasKey).length} people here carry a keycard (marked KEY): pickpocket one, or take one down and search the body.`);
@@ -1809,6 +1808,7 @@ async function walk(u, path) {
     u.facing = [x - u.x, y - u.y];
     u.x = x; u.y = y;
     renderUnits(); renderOverlays();
+    if (u === S.player) followPlayer();
     if (u === S.player && S.inDuct) sfx('step');
     else if (u === S.player) {
       sfx('step');
@@ -2224,12 +2224,27 @@ function renderLoot() {
   }
 }
 
-// The board is bigger than the screen: keep the player centered (clamped to the floor's edges).
+// Camera: drag the map to look anywhere, past the floor's edges too. It only snaps back to you at the start of a
+// floor, when you walk near the edge of the view, or when you press Centre (or C). Redraws never move it.
+function applyCamera() { $('#board').style.transform = `translate(${S.cam.x}px, ${S.cam.y}px)`; }
+
+function centerCamera() {
+  const vp = $('#viewport'), P = S.player;
+  S.cam = { x: vp.clientWidth / 2 - (P.x + .5) * T, y: vp.clientHeight / 2 - (P.y + .5) * T };
+  applyCamera();
+}
+
 function updateCamera() {
-  const vp = $('#viewport'), W = vp.clientWidth, H = vp.clientHeight, bw = S.w * T, bh = S.h * T, P = S.player;
-  const axis = (view, size, pos) => size <= view ? (view - size) / 2 : Math.min(0, Math.max(view - size, view / 2 - (pos + .5) * T));
-  S.cam = { x: axis(W, bw, P.x), y: axis(H, bh, P.y) };
-  $('#board').style.transform = `translate(${S.cam.x}px, ${S.cam.y}px)`;
+  if (!S.camSet) { S.camSet = true; return centerCamera(); }
+  applyCamera();
+}
+
+// When you walk near the edge of the view (or off it), the camera catches up.
+function followPlayer() {
+  const vp = $('#viewport'), P = S.player, m = T * 1.5;
+  const sx = (P.x + .5) * T + S.cam.x, sy = (P.y + .5) * T + S.cam.y;
+  if (sx < m || sy < m || sx > vp.clientWidth - m || sy > vp.clientHeight - m) return centerCamera();
+  applyCamera();
 }
 
 function onScreen(u) {
@@ -2420,27 +2435,23 @@ function renderSide() {
       <canvas id="minimap"></canvas>
     </div>
     <div class="panel">
-      <div class="row"><span>Cards ready</span><b>${S.cards.filter(c => !c.used).length} / ${S.cards.length}</b></div>
-      <div class="row"><span>Burned</span><b>${S.burned}</b></div>
       <div class="row"><span>Creds</span><b>¥${fmtMove(run.creds)}</b></div>
       ${S.codes.length ? `<div class="note">Codes found:</div>${S.codes.map(c => `<div class="row"><span>${c.label}</span><b>${c.code}</b></div>`).join("")}` : ""}
       ${run.gunMods ? `<div class="row"><span>Gun mods</span><b>+${run.gunMods} gun damage</b></div>` : ''}
-      <div class="row"><span>Healing stims</span><b>${run.stims} <button class="mini-btn" data-act="stim" ${run.stims && canUseItem ? '' : 'disabled'}>Heal 1×${STIM_TURNS}</button></b></div>
+      ${run.stims ? `<div class="row" title="Heals 1 a turn for ${STIM_TURNS} turns"><span>Healing stim${run.stims > 1 ? ` ×${run.stims}` : ''}</span><b><button class="mini-btn" data-act="stim" ${canUseItem ? '' : 'disabled'}>Use</button></b></div>` : ''}
       ${S.regen ? `<div class="buff">Healing stim: +1 HP at the start of your next ${S.regen} turn${S.regen > 1 ? 's' : ''}</div>` : ''}
       ${Object.entries(SERUMS).map(([kind, sv]) => `
-        <div class="row"><span>${sv.name}s</span><b>${run[kind]} <button class="mini-btn" data-act="serum-${kind}" ${run[kind] && canUseItem ? '' : 'disabled'}>+${sv.bonus} ${sv.desc}</button></b></div>
+        ${run[kind] ? `<div class="row" title="+${sv.bonus} ${sv.desc} for ${sv.turns} turns"><span>${sv.name}${run[kind] > 1 ? ` ×${run[kind]}` : ''}</span><b><button class="mini-btn" data-act="serum-${kind}" ${canUseItem ? '' : 'disabled'}>Use</button></b></div>` : ''}
         ${S.buff[kind] ? `<div class="buff">${sv.name}: +${sv.bonus} ${sv.desc}, ${S.buff[kind]} turn${S.buff[kind] > 1 ? 's' : ''} left</div>` : ''}`).join('')}
-      ${Object.entries(run.items).filter(([, n]) => n > 0).map(([id, n]) => `<div class="row" title="${GADGETS[id].text}"><span>${GADGETS[id].name}</span><b>${n} <button class="mini-btn ${S.throwing === id ? 'aiming' : ''}" data-act="gadget-${id}" ${canUseItem ? '' : 'disabled'}>${S.throwing === id ? 'Cancel' : GADGETS[id].throw ? 'Throw' : 'Use'}</button></b></div>`).join('')}
+      ${Object.entries(run.items).filter(([, n]) => n > 0).map(([id, n]) => `<div class="row" title="${GADGETS[id].text}"><span>${GADGETS[id].name}${n > 1 ? ` ×${n}` : ''}</span><b><button class="mini-btn ${S.throwing === id ? 'aiming' : ''}" data-act="gadget-${id}" ${canUseItem ? '' : 'disabled'}>${S.throwing === id ? 'Cancel' : GADGETS[id].throw ? 'Throw' : 'Use'}</button></b></div>`).join('')}
       ${S.disguise ? `<div class="row"><span>Disguise</span><b class="ok">${S.disguise}</b></div>` : ''}
       ${S.needKey ? `<div class="row"><span>Keycard</span><b class="${S.hasKey ? 'ok' : 'lost'}">${S.hasKey ? 'Got it' : 'Needed'}</b></div>` : ''}
-      <div class="note">Each turn: play one half of one card and move up to ${moveStat()}. Used cards go dark. Resting takes a turn: you burn one card for good and the rest come back.</div>
-      <div class="note"><span class="key seen"></span>Seen now <span class="key next"></span>Seen on their next move</div>
     </div>
     ${bodyHTML()}
     ${Object.keys(run.gear).length ? `<div class="panel loadout">
       ${GEAR_SLOTS.filter(sl => run.gear[sl]).map(sl => `<div class="row" title="${GEAR[run.gear[sl]].text}"><span>${sl}</span><b>${GEAR[run.gear[sl]].name}</b></div>`).join('')}
     </div>` : ''}
-    <div class="panel log">${S.log.slice(-10).map(l => `<div>${l}</div>`).join('')}</div>`;
+    ${S.log.length ? `<div class="panel log">${S.log.slice(-10).map(l => `<div>${l}</div>`).join('')}</div>` : ''}`;
   drawMinimap();
 }
 
@@ -2460,10 +2471,6 @@ function renderBar() {
     const bonus = '';
     bar.innerHTML = `
       <div class="hint">${hint}</div>
-      <div class="chips">
-        <span class="chip mv ${a.mvUsed ? 'used' : ''}">${a.mvUsed ? '✓ Moved' : a.steps ? `Move ${fmtMove(a.move)} left` : `Move ${fmtMove(a.move)}`}</span>
-        <span class="chip ${c ? 'atk' : 'empty'} ${a.atkUsed ? 'used' : ''}">${c ? (a.atkUsed ? '✓ ' : '') + atkLabel(playedHalf().action) + bonus : 'No card yet'}</span>
-      </div>
       ${canOverdrive() ? '<button data-act="overdrive" title="Synaptic Accelerator: once per floor">Overdrive</button>' : ''}
       <button data-act="rest" ${canRest ? '' : 'disabled'}>Rest</button>
       <button class="${a.atkUsed && a.mvUsed ? 'primary ready' : ''}" data-act="end" ${c ? '' : 'disabled'}>End turn</button>`;
@@ -2471,7 +2478,6 @@ function renderBar() {
     const c = S.sel;
     bar.innerHTML = `
       <div class="hint">${S.forcedRest ? '<b>Out of cards.</b> You have to rest this turn. ' : ''}<b>Resting</b> takes your whole turn. Pick a card to <b>burn</b> for good. All your other cards come back.</div>
-      <div class="chips"><span class="chip ${c ? 'atk' : 'empty'}">${c ? 'Burn ' + c.name : 'No card picked'}</span></div>
       ${S.forcedRest ? '' : '<button data-act="cancelrest">Cancel</button>'}
       <button class="primary" data-act="burn" ${c ? '' : 'disabled'}>Burn &amp; rest</button>`;
   } else if (S.phase === 'enemy') {
@@ -2524,6 +2530,10 @@ function renderHand() {
     const picked = S.phase === 'burn' ? S.sel === c : c === S.playing && !spent;
     el.className = 'card' + (c.used || (c === S.playing && spent) ? ' used' : '') + (picked ? ' sel' : '');
     el.innerHTML = cardHTML(c, picked && S.phase === 'turn' ? S.half : -1);
+    // A fan: cards tilt away from the middle and sit a little lower toward the edges.
+    const off = h.children.length - (S.cards.length - 1) / 2;
+    el.style.setProperty('--rot', off * 2.5 + 'deg');
+    el.style.setProperty('--drop', Math.abs(off) ** 1.6 * 3 + 'px');
     el.onclick = () => pickCard(c, 0);  // resting: picks the whole card to burn
     el.querySelectorAll('.half').forEach((hEl, i) => {
       hEl.onclick = e => { e.stopPropagation(); pickCard(c, i); };
@@ -2574,8 +2584,31 @@ function showTip(ev) {
 // ---------- Input ----------
 const board = $('#board');
 board.addEventListener('mousemove', showTip);
+
+// Dragging the map. A press that moves less than a few pixels is still a click.
+let drag = null;
+$('#viewport').addEventListener('pointerdown', e => {
+  if (e.button !== 0 || e.target.closest('button')) return;
+  drag = { x: e.clientX, y: e.clientY, cx: S.cam.x, cy: S.cam.y, moved: false };
+});
+window.addEventListener('pointermove', e => {
+  if (!drag) return;
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+  if (!drag.moved && Math.hypot(dx, dy) < 6) return;
+  drag.moved = true;
+  board.classList.add('dragging');
+  $('#tip').hidden = true;
+  S.cam = { x: drag.cx + dx, y: drag.cy + dy };
+  applyCamera();
+});
+window.addEventListener('pointerup', () => {
+  if (drag && drag.moved) { S.dragged = true; setTimeout(() => { S.dragged = false; }, 0); }
+  drag = null;
+  board.classList.remove('dragging');
+});
 board.addEventListener('mouseleave', () => { $('#tip').hidden = true; });
 board.addEventListener('click', e => {
+  if (S.dragged) return;  // the end of a drag isn't a click
   const t = e.target.closest('.tile');
   if (t) onTileClick(+t.dataset.x, +t.dataset.y);
 });
@@ -2606,6 +2639,7 @@ document.addEventListener('click', e => {
   else if (act.startsWith('take-')) takeOffer(+act.slice(5));
   else if (act === 'overdrive') overdrive();
   else if (act === 'sound') toggleSound();
+  else if (act === 'center') centerCamera();
   else if (act === 'god') toggleGod();
   else if (act === 'howto') showHowTo();
   else if (act === 'gacha') gacha();
@@ -2626,6 +2660,7 @@ document.addEventListener('click', e => {
   else if (act === 'newrun') { $('#modal').hidden = true; newRun(); }
 });
 
+document.addEventListener('keydown', e => { if ((e.key === 'c' || e.key === 'C') && e.target.tagName !== 'INPUT' && S) centerCamera(); });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'keypad') enterCode(); });
 
 newRun();

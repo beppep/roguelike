@@ -324,7 +324,7 @@ function dirTo(x, y) {
   return Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
 }
 
-const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0) + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? 'Noise' : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
+const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0) + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
   .filter(Boolean).join(' + ');
 const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Terminal, keypad or camera' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
 
@@ -777,7 +777,7 @@ function floorMap(idx) {
 
 // Start of a run: fresh deck and loot, then floor 1.
 function newRun() {
-  run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: 0, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gunMods: 0,
+  run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: START_CREDS, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gunMods: 0,
     seed: Math.floor(Math.random() * 1e6), maps: [], adapt: null, story: [], floorStats: [],
     gear: {}, implants: [], defects: [], notes: [], items: {} };
   godCreds();
@@ -891,6 +891,7 @@ function startRound() {
   // A turn: use one card (click it, then click its target) and move (click a blue tile), in any order.
   S.phase = 'turn'; S.sel = null; S.playing = null; S.preview = null; S.hoverDir = null;
   S.hidden = false; S.ghost = false; S.throwing = null;
+  if (S.regen > 0) { S.regen--; heal(1); }
   if (S.camLoop > 0 && --S.camLoop === 0) log('The camera loop runs out. The cameras are watching again.');
   // move = steps left this turn (you can split them over several clicks), steps = steps taken so far.
   S.act = { atk: null, move: godMode ? Infinity : moveStat() + serumBonus('speed'), atkUsed: false, mvUsed: false, steps: 0 };
@@ -1057,6 +1058,11 @@ async function onTileClick(x, y) {
 async function useAttack(hit) {
   const a = S.act, P = S.player;
   let s = a.atk;
+  // Halves that cost creds (Coin Toss): no money, no play.
+  if (s.price) {
+    if (run.creds < s.price) { toast(`You need ¥${s.price}. You have ¥${fmtMove(run.creds)}.`); return; }
+    run.creds -= s.price;
+  }
   if (s.type === 'hack') { S.busy = true; return hackAt(hit[0]); }
   if (s.bribe) return bribe(enemyAt(hit[0].x, hit[0].y));
   {
@@ -1067,7 +1073,7 @@ async function useAttack(hit) {
     S.busy = true; renderOverlays();
     const first = targets[0] || doors[0] || vats[0] || hit[0];
     if (s.type === 'point' && s.ignite) { ignite(first.x, first.y); makeNoise(first.x, first.y, NOISE.shape, P); log('Incinerate: a jet of fire.'); }
-    else if (s.type === 'point') { showNoise(first.x, first.y, s.noise); makeNoise(first.x, first.y, s.noise, first); log(`You throw your voice into the ${areaName(first.x, first.y)}.`); }
+    else if (s.type === 'point') { showNoise(first.x, first.y, s.noise); makeNoise(first.x, first.y, s.noise, first); log(`You toss a coin into the ${areaName(first.x, first.y)}.`); }
     else if (s.type === 'ranged') { sfx(s.silent || !s.dmg ? 'puff' : 'bang'); await shot(P, first); }
     else { if (s.dmg > 0) sfx('hit'); else if (s.stun) sfx('stun'); await lunge(P, first); }
     if (s.cost) { S.player.hp = Math.max(1, S.player.hp - s.cost); floatText(S.player, '-' + s.cost, 'dmg'); log(`You pay ${s.cost} HP in blood.`); }
@@ -1199,7 +1205,7 @@ function givePotion(kind, at, from) {
   if (kind === 'stim') {
     run.stims++;
     floatText(at, '+STIM', 'heal');
-    log(`You take a <b>healing stim</b> ${from}. Use it from the panel on the right to heal ${STIM_HEAL}.`);
+    log(`You take a <b>healing stim</b> ${from}. Use it from the panel on the right: it heals 1 a turn for ${STIM_TURNS} turns.`);
   } else {
     const sv = SERUMS[kind];
     run[kind]++;
@@ -1263,7 +1269,10 @@ function openCache(x, y) {
 function useStim() {
   if (!run.stims || S.busy || S.phase !== 'turn') return;
   run.stims--;
-  heal(STIM_HEAL);
+  // A second stim while one is working adds its turns.
+  S.regen = (S.regen || 0) + STIM_TURNS - 1;
+  heal(1);
+  renderSide();
 }
 
 const serumBonus = kind => S.buff[kind] > 0 ? SERUMS[kind].bonus : 0;
@@ -2416,7 +2425,8 @@ function renderSide() {
       <div class="row"><span>Creds</span><b>¥${fmtMove(run.creds)}</b></div>
       ${S.codes.length ? `<div class="note">Codes found:</div>${S.codes.map(c => `<div class="row"><span>${c.label}</span><b>${c.code}</b></div>`).join("")}` : ""}
       ${run.gunMods ? `<div class="row"><span>Gun mods</span><b>+${run.gunMods} gun damage</b></div>` : ''}
-      <div class="row"><span>Healing stims</span><b>${run.stims} <button class="mini-btn" data-act="stim" ${run.stims && canUseItem ? '' : 'disabled'}>Heal +${STIM_HEAL}</button></b></div>
+      <div class="row"><span>Healing stims</span><b>${run.stims} <button class="mini-btn" data-act="stim" ${run.stims && canUseItem ? '' : 'disabled'}>Heal 1×${STIM_TURNS}</button></b></div>
+      ${S.regen ? `<div class="buff">Healing stim: +1 HP at the start of your next ${S.regen} turn${S.regen > 1 ? 's' : ''}</div>` : ''}
       ${Object.entries(SERUMS).map(([kind, sv]) => `
         <div class="row"><span>${sv.name}s</span><b>${run[kind]} <button class="mini-btn" data-act="serum-${kind}" ${run[kind] && canUseItem ? '' : 'disabled'}>+${sv.bonus} ${sv.desc}</button></b></div>
         ${S.buff[kind] ? `<div class="buff">${sv.name}: +${sv.bonus} ${sv.desc}, ${S.buff[kind]} turn${S.buff[kind] > 1 ? 's' : ''} left</div>` : ''}`).join('')}
@@ -2489,7 +2499,7 @@ function actionHTML(s) {
       (s.move ? `<div class="big dash">Move +${cardMove(s)}</div>` : '') +
       (s.ghost ? '<div class="big dash">Vanish</div><div class="sub">Cameras and the unaware can\'t see you this round</div>' : '<div class="sub">Self</div>');
   }
-  const sub = s.type === 'hack' ? 'Terminal or keypad next to you, or a camera in sight' : s.bribe ? 'Someone unaware next to you' : s.ignite ? 'Fire. Oil and chemicals spread it' : s.type === 'point' ? 'A sound anywhere you can see' : s.push ? 'Into walls: 2 damage' : s.breach ? 'Blow a hole in a wall. Very loud'
+  const sub = s.type === 'hack' ? 'Terminal or keypad next to you, or a camera in sight' : s.bribe ? 'Someone unaware next to you' : s.ignite ? 'Fire. Oil and chemicals spread it' : s.type === 'point' ? (s.price ? 'Lands where you can see; people go to look' : 'A sound anywhere you can see') : s.push ? 'Into walls: 2 damage' : s.breach ? 'Blow a hole in a wall. Very loud'
     : s.cost ? `Costs ${s.cost} HP` : s.pick ? 'Opens a door, quietly'
     : s.steal ? 'Rob someone unaware' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Ranged · clear shot' : SHAPE_NAMES[s.shape];
   return `<div class="big">${atkName(s)}</div><div class="sub">${sub}</div>` +

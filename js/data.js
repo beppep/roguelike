@@ -25,12 +25,13 @@ const HALVES = {
   lockpick:   { name: 'Lockpick',        action: { type: 'melee', dmg: 0, pick: true } },
   hack:       { name: 'Hack',            action: { type: 'hack', range: 5 } },
   pistol:     { name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5, silent: true } },
-  // Shock Shove: push someone next to you 2 tiles and stun them for a turn; slamming into something does 2 damage.
-  shove:      { name: 'Shock Shove',     action: { type: 'melee', dmg: 0, push: 2, stun: 1 } },
+  // Shove: push someone next to you 2 tiles and stun them for a turn; slamming into something does 2 damage.
+  shove:      { name: 'Shove',           action: { type: 'melee', dmg: 0, push: 2, stun: 1 } },
   pickpocket: { name: 'Pickpocket',      action: { type: 'melee', dmg: 0, steal: true } },
   bribe:      { name: 'Bribe',           action: { type: 'melee', dmg: 0, bribe: true } },
   patch:      { name: 'Med-Patch',       action: { type: 'self', heal: 2 } },
-  whisper:    { name: 'Whisper',         action: { type: 'point', noise: 6, range: 7 } },
+  // Coin Toss: throw a coin (¥1) at a tile you can see; everyone in earshot of it goes to look.
+  coin:       { name: 'Coin Toss',       action: { type: 'point', noise: 6, range: 7, price: 1 } },
   katana:     { name: 'Mono-Katana',     action: { type: 'melee', dmg: 4 } },
   breach:     { name: 'Breach',          action: { type: 'melee', dmg: 0, breach: true } },
   smartpistol:{ name: 'Smartpistol',     action: { type: 'ranged', dmg: 2, range: 4 } },
@@ -58,7 +59,7 @@ const startingDeck = () => [
   card(2, 'strike', 'lockpick'),
   card(3, 'strike', 'hack'),
   card(4, 'pistol', 'hack'),
-  card(5, 'shove', 'whisper'),
+  card(5, 'shove', 'coin'),
   card(6, 'pickpocket', 'bribe'),
   card(7, 'patch', 'sprint'),
   card(8, 'lockpick', 'sprint'),
@@ -71,7 +72,7 @@ const REWARD_CARDS = [
   card(13, 'arc', 'shove'),
   card(14, 'rail', 'lockpick'),
   card(15, 'emp', 'hack'),
-  card(16, 'rifle', 'whisper'),
+  card(16, 'rifle', 'coin'),
   card(17, 'overclock', 'patch'),
   card(18, 'scatter', 'breach'),
   card(19, 'taser', 'hack'),
@@ -83,7 +84,8 @@ const REWARD_CARDS = [
 
 // What a successful pickpocket finds (the rest of the time: nothing). A potion is one of the three below, equally likely.
 const LOOT_ODDS = { card: 0.15, creds: 0.3, potion: 0.3 };
-const STIM_HEAL = 3;
+// A healing stim heals 1 HP a turn for STIM_TURNS turns: right away, then at the start of each of your next turns.
+const STIM_TURNS = 3;
 
 // Serums: drink one and the bonus lasts this turn plus the next ones, `turns` turns in all.
 // The strength serum raises your basic Strength, so it boosts Melee Attacks (the cards that use Strength).
@@ -270,6 +272,8 @@ const GACHA_PRICE = 10;
 // Bribing: click someone next to you who hasn't spotted you, with no card picked. Humans only (not machines,
 // golems or daemons). A bribed person never raises the alarm over you on this floor.
 const BRIBE_PRICE = 20;
+// Pocket change at the start of a run (enough for a few coin tosses).
+const START_CREDS = 5;
 
 // ---------- Token icons ----------
 // Small silhouettes (24x24, drawn in the unit's colour) shown on the round tokens. '@' is you.

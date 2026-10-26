@@ -1717,9 +1717,10 @@ function nextAction() {
 }
 
 // Ending the turn spends the picked card even if you didn't use it; you can't end a turn without one.
-// Waiting: end the turn without playing a card (one you picked but did not use goes back into your hand).
+// Waiting: stand still and play no card this turn (one you picked but did not use goes back into your hand).
+// Only before you've moved: moving costs a card, so walking eventually wears your hand down.
 async function waitTurn() {
-  if (S.busy || S.phase !== 'turn' || S.act.atkUsed) return;
+  if (S.busy || S.phase !== 'turn' || S.act.atkUsed || S.act.steps) return;
   S.playing = null; S.act.atk = null; S.preview = null;
   S.hidden = hasImplant('chameleon') && !S.act.steps;
   log('You wait.');
@@ -2852,7 +2853,7 @@ function renderBar() {
     bar.innerHTML = `
       <div class="hint">${hint}</div>
       ${canOverdrive() ? '<button data-act="overdrive" title="Synaptic Accelerator: once per floor">Overdrive</button>' : ''}
-      <button data-act="wait" ${a.atkUsed ? 'disabled' : ''} title="End your turn without playing a card">Wait</button>
+      <button data-act="wait" ${a.atkUsed || a.steps ? 'disabled' : ''} title="Stand still: end your turn without moving or playing a card">Wait</button>
       <button data-act="rest" ${canRest ? '' : 'disabled'}>Rest</button>
       <button class="${a.atkUsed && a.mvUsed ? 'primary ready' : ''}" data-act="end" ${c ? '' : 'disabled'}>End turn</button>`;
   } else if (S.phase === 'burn') {

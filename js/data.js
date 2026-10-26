@@ -12,8 +12,9 @@ const SHAPES = {
   arc:  [[-1, -1], [0, -1], [1, -1]],
   line: [[0, -1], [0, -2], [0, -3]],
   cone: [[0, -1], [-1, -2], [0, -2], [1, -2]],
+  rail: [[0, -1], [0, -2], [0, -3], [0, -4], [0, -5]],
 };
-const SHAPE_NAMES = { arc: 'Sweep', line: 'Pierce', cone: 'Cone', ring: 'Whirl' };
+const SHAPE_NAMES = { arc: 'Sweep', line: 'Pierce', rail: 'Pierce 5', cone: 'Cone', ring: 'Whirl' };
 
 // You, the operative. strength = damage of Melee Attack, move = free steps every turn.
 const OPERATIVE = { name: 'Operative', strength: 3, move: 4 };
@@ -118,12 +119,14 @@ const BREAKABLES = {
 // safes hold other guns: taking one swaps it for yours, and your old gun stays on the floor (you can swap back).
 // Guns trade off rather than stack: quiet or loud, damage, range, a cone or a line.
 const GUNS = {
-  silenced: { name: 'Silenced Pistol', text: 'Quiet. 5 damage, range 5.',                                  action: { type: 'ranged', gun: true, dmg: 5, range: 5, silent: true } },
-  revolver: { name: 'Heavy Revolver',  text: 'Loud. 8 damage, range 4.',                                   action: { type: 'ranged', gun: true, dmg: 8, range: 4 } },
-  rifle:    { name: 'Smart Rifle',     text: 'Loud. 6 damage, range 8.',                                   action: { type: 'ranged', gun: true, dmg: 6, range: 8 } },
-  scatter:  { name: 'Scattergun',      text: 'Loud. 4 damage to everyone in a cone in front of you.',     action: { type: 'shape', gun: true, shape: 'cone', dmg: 4 } },
-  rail:     { name: 'Rail Gun',        text: 'Loud. 5 damage to everyone in a line 3 long.',              action: { type: 'shape', gun: true, shape: 'line', dmg: 5 } },
-  tranq:    { name: 'Tranq Pistol',    text: 'Quiet. No damage: puts the target to sleep for 3 turns. Range 5.', action: { type: 'ranged', gun: true, dmg: 0, stun: 3, range: 5, silent: true } },
+  // The one you start with is deliberately weak: anything you find is an upgrade of some kind.
+  silenced: { name: 'Silenced Pistol',    text: 'Quiet. 3 damage, range 4.',                                    action: { type: 'ranged', gun: true, dmg: 3, range: 4, silent: true } },
+  carbine:  { name: 'Suppressed Carbine', text: 'Quiet. 5 damage, range 6.',                                    action: { type: 'ranged', gun: true, dmg: 5, range: 6, silent: true } },
+  revolver: { name: 'Heavy Revolver',     text: 'Loud. 8 damage, range 5.',                                     action: { type: 'ranged', gun: true, dmg: 8, range: 5 } },
+  rifle:    { name: 'Smart Rifle',        text: 'Loud. 6 damage, range 8.',                                     action: { type: 'ranged', gun: true, dmg: 6, range: 8 } },
+  scatter:  { name: 'Scattergun',         text: 'Loud. 5 damage to everyone in a cone in front of you.',       action: { type: 'shape', gun: true, shape: 'cone', dmg: 5 } },
+  rail:     { name: 'Rail Gun',           text: 'Loud. 6 damage to everyone in a line 5 long.',                action: { type: 'shape', gun: true, shape: 'rail', dmg: 6 } },
+  tranq:    { name: 'Tranq Pistol',       text: 'Quiet. No damage: puts the target to sleep for 3 turns. Range 6.', action: { type: 'ranged', gun: true, dmg: 0, stun: 3, range: 6, silent: true } },
 };
 const START_GUN = 'silenced';
 // Gun mods fit the gun you carry when you find them, and stay with that gun: +1 damage (a tranq gun sleeps 1 turn

@@ -114,7 +114,7 @@ function atkTiles(s, from, dir) {
     for (const d of dir ? [dir] : DIRS) {
       for (const [sx, sy] of SHAPES[s.shape]) {
         const [rx, ry] = rot(sx, sy, d), x = from.x + rx, y = from.y + ry;
-        if (s.shape === 'line' && isWall(x, y)) { add(x, y); break; }
+        if ((s.shape === 'line' || s.shape === 'rail') && isWall(x, y)) { add(x, y); break; }
         add(x, y);
       }
     }
@@ -333,7 +333,7 @@ function dirTo(x, y) {
   return Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
 }
 
-const atkName = s => [s.dmg ? `Attack ${s.dmg + (s.str && S ? strBonus() : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
+const atkName = s => s.gun ? (s.dmg ? `Shoot ${s.dmg}` : `Sleep ${s.stun}`) : [s.dmg ? `Attack ${s.dmg + (s.str && S ? strBonus() : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
   .filter(Boolean).join(' + ');
 const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Terminal, keypad or camera' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
 
@@ -2613,8 +2613,9 @@ function diagram(s) {
   else if (s.shape === 'ring') tiles = [[-1, -1], [0, -1], [1, -1], [-1, 0], [1, 0], [-1, 1], [0, 1], [1, 1]];
   else tiles = SHAPES[s.shape];
   const set = new Set(tiles.map(([x, y]) => key(x, y)));
-  let h = '<div class="diag">';
-  for (let y = -3; y <= 1; y++) for (let x = -2; x <= 2; x++) {
+  // Gun patterns stay visible on cards in the hand (other diagrams are hover-only there).
+  let h = `<div class="diag${s.gun ? ' gun' : ''}">`;
+  for (let y = Math.min(-3, ...tiles.map(t => t[1])); y <= 1; y++) for (let x = -2; x <= 2; x++) {
     const c = !x && !y ? 'me' : set.has(key(x, y)) ? (s.type === 'melee' ? 'opt' : 'hit') : '';
     h += `<i class="${c}"></i>`;
   }

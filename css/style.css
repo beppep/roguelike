@@ -482,3 +482,7 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
   linear-gradient(#6a645a, #6a645a) 5px 5px / 5px 60% no-repeat, #24221e; }
 #board .tile.opendoor.ns { background: linear-gradient(180deg, #3a3631 0 4px, transparent 4px calc(100% - 4px), #3a3631 calc(100% - 4px)),
   linear-gradient(#6a645a, #6a645a) 5px 5px / 60% 5px no-repeat, #24221e; }
+
+/* A gun's pattern (Scattergun, Rail Gun) stays on the card in the hand, small. */
+#hand .card .diag.gun { display: grid; grid-template-columns: repeat(5, 5px); gap: 1px; margin-top: 2px; }
+#hand .card .diag.gun i { width: 5px; height: 5px; }

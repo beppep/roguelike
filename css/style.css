@@ -537,3 +537,5 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 @keyframes glitch { 0% { filter: none; transform: translate(0, 0); } 20% { filter: hue-rotate(180deg) brightness(1.6); transform: translate(-2px, 1px); }
   40% { filter: none; transform: translate(2px, -1px); } 60% { filter: hue-rotate(90deg) brightness(1.4) contrast(1.5); transform: translate(-1px, 0); } 100% { filter: none; transform: translate(0, 0); } }
 .glitch { animation: glitch .6s steps(6) 1; }
+/* Text on documents takes the document's ink, not the modal's light grey (dark ink on paper, green on screens). */
+#modal .doc p { color: inherit; margin: 8px 0 0; }

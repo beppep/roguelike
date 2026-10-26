@@ -2500,8 +2500,10 @@ function renderOverlays() {
   const markAtk = (spec, dir) => {
     const tiles = atkTiles(spec, P, dir);
     if (dir) return mark(tiles, 'preview');
-    mark(tiles.filter(t => !cls.has(key(t.x, t.y))), 'range');  // faint range never hides a blue move tile
-    mark(tiles.filter(t => spec.type !== 'point' && hasTarget(spec, t) && structureKind(t.x, t.y) !== 'wall'), 'target');
+    // Attacks are red; hacking is blue.
+    const tint = spec.type === 'hack' ? '-hack' : '';
+    mark(tiles.filter(t => !cls.has(key(t.x, t.y))), 'range' + tint);  // faint range never hides a move tile
+    mark(tiles.filter(t => spec.type !== 'point' && hasTarget(spec, t) && structureKind(t.x, t.y) !== 'wall'), 'target' + tint);
   };
   // Blue: where you can still move. Red on top: what the picked (or hovered) card can hit.
   if (S.phase === 'turn' && !S.busy && S.throwing) mark(throwTiles(S.throwing), 'target');
@@ -2522,7 +2524,7 @@ function renderOverlays() {
   const aims = new Set();
   for (const e of S.enemies) if (e.aim && visible(e)) e.aim.forEach(t => aims.add(key(t.x, t.y)));
   for (const t of $('#board').querySelectorAll('.tile')) {
-    t.classList.remove('reach', 'range', 'target', 'preview');
+    t.classList.remove('reach', 'range', 'target', 'preview', 'range-hack', 'target-hack');
     const k = key(+t.dataset.x, +t.dataset.y), c = cls.get(k);
     if (c) t.classList.add(c);
     t.classList.toggle('seen', seen.has(k));

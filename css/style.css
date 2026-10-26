@@ -551,3 +551,22 @@ body.god [data-act="ascend"] { display: inline-block; background: #3a2420; borde
 .shop-got { color: var(--gold) !important; font-weight: 600; }
 /* A card you just got glows until you use it. */
 #hand .card.fresh:not(.used) { box-shadow: 0 0 0 2px var(--gold), 0 0 14px rgba(201,162,74,.6), 0 4px 10px rgba(0,0,0,.5); }
+
+/* ---------- Full-window map ----------
+   The map is the whole window; the UI floats over it. */
+body { overflow: hidden; }
+#app { max-width: none; padding: 0; margin: 0; }
+#layout { display: block; }
+#viewport { position: fixed; inset: 0; width: auto; height: auto; border: 0; z-index: 0; }
+header { position: fixed; top: 0; left: 0; right: 0; z-index: 10; margin: 0; padding: 8px 16px; align-items: center;
+  background: linear-gradient(rgba(14,13,11,.96), rgba(14,13,11,.8)); border-bottom: 1px solid var(--line); }
+#side { position: fixed; top: 56px; right: 10px; width: 222px; max-height: calc(100vh - 66px); overflow-y: auto; z-index: 10; }
+#side .panel { background: rgba(23,21,18,.94); }
+#bar { position: fixed; left: 0; right: 242px; bottom: 156px; z-index: 10; margin: 0; padding: 6px 16px; pointer-events: none;
+  background: linear-gradient(transparent, rgba(14,13,11,.85)); }
+#bar > * { pointer-events: auto; }
+#hand { position: fixed; left: 0; right: 242px; bottom: 0; z-index: 10; pointer-events: none; background: rgba(14,13,11,.85); }
+#hand .card { pointer-events: auto; }
+#hand.locked .card { pointer-events: none; }
+#center { top: 60px; right: 244px; }
+#feed { bottom: 220px; left: 12px; }

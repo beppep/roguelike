@@ -2547,17 +2547,24 @@ function renderLoot() {
 // floor, when you walk near the edge of the view, or when you press Centre (or C). Redraws never move it.
 // The building may slide at most CAM_MARGIN past the edges of the view (a smaller floor just stays centred).
 const CAM_MARGIN = T * 2;
+// The part of the window not covered by the floating UI: header on top, side panel on the right, turn bar and hand
+// at the bottom. In window pixels, as insets from each edge.
+function openArea() {
+  const W = innerWidth, H = innerHeight, rect = sel => { const el = $(sel); return el ? el.getBoundingClientRect() : null; };
+  const head = rect('header'), side = rect('#side'), bar = rect('#bar');
+  return { l: 0, t: head ? head.bottom : 0, r: side && side.width ? W - side.left : 0, b: bar ? H - bar.top : 0, W, H };
+}
 function clampCamera() {
-  const vp = $('#viewport'), W = vp.clientWidth, H = vp.clientHeight, bw = S.w * T, bh = S.h * T;
-  const axis = (v, view, size) => size + 2 * CAM_MARGIN <= view ? (view - size) / 2 : Math.min(CAM_MARGIN, Math.max(view - size - CAM_MARGIN, v));
-  S.cam = { x: axis(S.cam.x, W, bw), y: axis(S.cam.y, H, bh) };
+  const o = openArea(), bw = S.w * T, bh = S.h * T;
+  const axis = (v, lo, hi, size) => size + 2 * CAM_MARGIN <= hi - lo ? lo + (hi - lo - size) / 2 : Math.min(lo + CAM_MARGIN, Math.max(hi - size - CAM_MARGIN, v));
+  S.cam = { x: axis(S.cam.x, o.l, o.W - o.r, bw), y: axis(S.cam.y, o.t, o.H - o.b, bh) };
 }
 function applyCamera() {
   clampCamera(); $('#board').style.transform = `translate(${S.cam.x}px, ${S.cam.y}px)`; }
 
 function centerCamera() {
-  const vp = $('#viewport'), P = S.player;
-  S.cam = { x: vp.clientWidth / 2 - (P.x + .5) * T, y: vp.clientHeight / 2 - (P.y + .5) * T };
+  const o = openArea(), P = S.player;
+  S.cam = { x: o.l + (o.W - o.l - o.r) / 2 - (P.x + .5) * T, y: o.t + (o.H - o.t - o.b) / 2 - (P.y + .5) * T };
   applyCamera();
 }
 
@@ -2568,9 +2575,9 @@ function updateCamera() {
 
 // When you walk near the edge of the view (or off it), the camera catches up.
 function followPlayer() {
-  const vp = $('#viewport'), P = S.player, m = T * 1.5;
+  const o = openArea(), P = S.player, m = T * 1.5;
   const sx = (P.x + .5) * T + S.cam.x, sy = (P.y + .5) * T + S.cam.y;
-  if (sx < m || sy < m || sx > vp.clientWidth - m || sy > vp.clientHeight - m) return centerCamera();
+  if (sx < o.l + m || sy < o.t + m || sx > o.W - o.r - m || sy > o.H - o.b - m) return centerCamera();
   applyCamera();
 }
 
@@ -2972,6 +2979,7 @@ function showTip(ev) {
 // ---------- Input ----------
 const board = $('#board');
 board.addEventListener('mousemove', showTip);
+window.addEventListener('resize', () => { if (S && S.player) applyCamera(); });
 
 // Dragging the map. A press that moves less than a few pixels is still a click.
 let drag = null;

@@ -1717,6 +1717,16 @@ function nextAction() {
 }
 
 // Ending the turn spends the picked card even if you didn't use it; you can't end a turn without one.
+// Waiting: end the turn without playing a card (one you picked but did not use goes back into your hand).
+async function waitTurn() {
+  if (S.busy || S.phase !== 'turn' || S.act.atkUsed) return;
+  S.playing = null; S.act.atk = null; S.preview = null;
+  S.hidden = hasImplant('chameleon') && !S.act.steps;
+  log('You wait.');
+  tickSerums();
+  await runEnemyPhase();
+}
+
 async function endTurn() {
   if (S.busy || S.phase !== 'turn') return;
   if (!S.playing) { toast('Pick a card first, or rest.'); return; }
@@ -2842,6 +2852,7 @@ function renderBar() {
     bar.innerHTML = `
       <div class="hint">${hint}</div>
       ${canOverdrive() ? '<button data-act="overdrive" title="Synaptic Accelerator: once per floor">Overdrive</button>' : ''}
+      <button data-act="wait" ${a.atkUsed ? 'disabled' : ''} title="End your turn without playing a card">Wait</button>
       <button data-act="rest" ${canRest ? '' : 'disabled'}>Rest</button>
       <button class="${a.atkUsed && a.mvUsed ? 'primary ready' : ''}" data-act="end" ${c ? '' : 'disabled'}>End turn</button>`;
   } else if (S.phase === 'burn') {
@@ -3007,6 +3018,7 @@ document.addEventListener('click', e => {
   else if (act === 'burn') confirmRest();
   else if (act === 'cancelrest') { if (S.phase === 'burn') { S.phase = 'turn'; S.sel = null; render(); } }
   else if (act === 'end') endTurn();
+  else if (act === 'wait') waitTurn();
   else if (act === 'closeread') { $('#modal').hidden = true; S.keypad = null; }
   else if (act === 'keypad-enter') enterCode();
   else if (act.startsWith('buy-')) buy(act.slice(4));

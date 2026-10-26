@@ -475,3 +475,10 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 
 /* A gun lying on the floor. */
 .tile.drop-gun span { width: 20px; height: 8px; border-radius: 1px 3px 3px 1px; background: #77756c; box-shadow: inset 0 0 0 2px #2e2d29, -3px 5px 0 -1px #4a4842, 0 1px 0 rgba(0,0,0,.6); }
+
+/* Open doors: a frame on both sides with the door swung back against one of them (drawn as the tile's background,
+   so the move and vision highlights still show on top). */
+#board .tile.opendoor { background: linear-gradient(90deg, #3a3631 0 4px, transparent 4px calc(100% - 4px), #3a3631 calc(100% - 4px)),
+  linear-gradient(#6a645a, #6a645a) 5px 5px / 5px 60% no-repeat, #24221e; }
+#board .tile.opendoor.ns { background: linear-gradient(180deg, #3a3631 0 4px, transparent 4px calc(100% - 4px), #3a3631 calc(100% - 4px)),
+  linear-gradient(#6a645a, #6a645a) 5px 5px / 60% 5px no-repeat, #24221e; }

@@ -10,7 +10,7 @@ function mulberry32(a) {
   };
 }
 
-// Builds a floor as map rows: # wall, . floor, + door, o floor-themed furniture (blocks movement and sight),
+// Builds a floor as map rows: # wall, . floor, + locked door, O open door, o floor-themed furniture (blocks movement and sight),
 // K desk with a computer and F filing cabinet (solid; search them from next door), $ loot cache,
 // L keycard door, C keypad door, S wall safe, V vending machine, T networked terminal, G vent grate (in a wall),
 // P player, X exit (the lift up), g/d/e/k/m/a enemies (ganger, drone, enforcer, cultist, golem, avatar), v clerk, c camera, n sniper, y daemon, b backroom floor, A altar, r blood circle floor,
@@ -100,7 +100,7 @@ function generateFloor(f) {
   const connect = k => {
     const [a, b] = k.split(',').map(Number);
     const [x, y] = pick(cand.get(k));
-    g[y][x] = rng() < 0.75 ? '+' : '.';
+    g[y][x] = rng() < 0.75 ? '+' : 'O';  // a locked door, or an open one
     degree[a]++; degree[b]++; used.add(k);
   };
   for (const k of edges) {
@@ -141,7 +141,7 @@ function generateFloor(f) {
     const out = [];
     for (let x = r.x; x < r.x + r.w; x++) out.push([x, r.y - 1], [x, r.y + r.h]);
     for (let y = r.y; y < r.y + r.h; y++) out.push([r.x - 1, y], [r.x + r.w, y]);
-    return out.filter(([x, y]) => g[y][x] === '+' || g[y][x] === '.');
+    return out.filter(([x, y]) => g[y][x] === '+' || g[y][x] === 'O' || g[y][x] === '.');
   };
   if (KEYCARD_FLOORS.has(f.index)) {
     for (const [x, y] of openings(exitRoom)) g[y][x] = 'L';
@@ -221,7 +221,7 @@ function generateFloor(f) {
     if (g[y][x] !== '.') return null;
     for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
       const c = g[y + dy][x + dx];
-      if ('+LC'.includes(c) || ((dx || dy) && c === '.' && (y + dy < r.y || y + dy >= r.y + r.h || x + dx < r.x || x + dx >= r.x + r.w))) return null;
+      if ('+OLC'.includes(c) || ((dx || dy) && c === '.' && (y + dy < r.y || y + dy >= r.y + r.h || x + dx < r.x || x + dx >= r.x + r.w))) return null;
     }
     return [x, y];
   };

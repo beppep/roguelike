@@ -818,7 +818,7 @@ function loadRoom(idx) {
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
     doors: new Map(), keyDoors: new Set(), codeDoors: new Map(), codes: [], planned: false, keypad: null, props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
-    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0, shp: new Map(),
+    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0, shp: new Map(), openDoors: new Set(),
     alarm: 0, reinforceIn: 0, adapt: run.adapt, noiseBonus: run.adapt === 'loud' ? 1 : 0, familiar: hasEcho('staff'), stats: { kills: 0, takedowns: 0, alerts: 0, cameras: 0, alarm: 0, pickpockets: 0, smashed: 0, hacks: 0, loot: 0 },
   };
   let n = 0;
@@ -827,6 +827,7 @@ function loadRoom(idx) {
     S.walls.push([...row].map((c, x) => {
       if (c === 'P') S.player = { id: 'p', x, y, hp: maxHpStat(), max: maxHpStat() };
       else if (c === 'X') S.exit = { x, y };
+      else if (c === 'O') S.openDoors.add(key(x, y));
       else if (c === '+') S.doors.set(key(x, y), DOOR_HP_BY_FLOOR[idx] || DOOR_HP_BY_FLOOR[DOOR_HP_BY_FLOOR.length - 1]);
       else if (c === 'L') S.keyDoors.add(key(x, y));
       else if (c === 'C') S.codeDoors.set(key(x, y), doorCode);  // the keypad room's doors share one code
@@ -1449,6 +1450,7 @@ function hitDoor(t, s) {
     sfx('boom');
   } else if (s.pick) {
     S.doors.delete(k);
+    S.openDoors.add(k);
     floatText(t, 'OPEN', 'heal');
     log('You pick the lock. The door slides open.');
     sfx('door');
@@ -1903,6 +1905,7 @@ async function walk(u, path) {
   for (const [x, y] of path) {
     if (u !== S.player && doorAt(x, y)) {
       S.doors.delete(key(x, y));
+      S.openDoors.add(key(x, y));
       renderDoors();
       if (S.vis.has(key(x, y))) { sfx('door'); log(`${nameOf(u)} opens a door.`); }
     }
@@ -2294,6 +2297,13 @@ function renderExit() {
 }
 
 function renderDoors() {
+  for (const t of $('#board').querySelectorAll('.tile.opendoor')) t.classList.remove('opendoor', 'ns');
+  for (const k of S.openDoors) {
+    const [x, y] = unkey(k), t = tileEl(x, y);
+    t.classList.add('opendoor');
+    // Walls above and below: the door sits in a north-south wall.
+    t.classList.toggle('ns', !!(S.walls[y - 1] && S.walls[y - 1][x] && S.walls[y + 1] && S.walls[y + 1][x]));
+  }
   for (const t of $('#board').querySelectorAll('.tile.door')) { t.classList.remove('door'); t.innerHTML = ''; }
   for (const [k, hp] of S.doors) {
     const t = tileEl(...unkey(k));
@@ -2669,7 +2679,8 @@ function describeTile(x, y) {
   if (f) out.push({ desk: 'Desk', cabinet: 'Cabinet', safe: f.opened ? 'Safe (open)' : 'Safe', vending: 'Vending machine', terminal: 'Terminal',
     husk: 'Droid husk', altar: 'Altar', stairs: 'Fire stairs', contact: 'Contact', phone: 'Phone' }[f.kind]);
   if (S.grates.has(k) && !S.inDuct) out.push('Vent grate');
-  if (doorAt(x, y)) out.push('Door');
+  if (doorAt(x, y)) out.push('Locked door');
+  if (S.openDoors.has(k)) out.push('Open door');
   if (S.keyDoors.has(k)) out.push('Keycard door');
   if (S.codeDoors.has(k)) out.push('Keypad door');
   if (S.vats.has(k)) out.push(S.breakable.name[0].toUpperCase() + S.breakable.name.slice(1));

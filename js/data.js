@@ -97,8 +97,11 @@ const rollDmg = n => {
   return Math.max(1, n + (r < DMG_VARIANCE / 2 ? -1 : r < DMG_VARIANCE ? 1 : 0));
 };
 
-// Doors ('+' on the map) block movement and sight until smashed (DOOR_HP) or lockpicked.
-const DOOR_HP = 5;
+// Doors ('+' on the map) block movement and sight until smashed or lockpicked. They get sturdier higher up.
+const DOOR_HP_BY_FLOOR = [5, 7, 9];
+// Everything else can be smashed with damaging attacks too (smashing is loud). HP by kind; furniture spills
+// whatever it held. Outer walls, grates, the fire stairs and people at their desks can't be broken.
+const STRUCTURE_HP = { keydoor: 15, codedoor: 12, wall: 20, desk: 4, cabinet: 6, terminal: 6, vending: 8, safe: 20, husk: 5, altar: 12, phone: 3 };
 
 // Furniture you can smash with damaging attacks, per floor theme. Each one leaves a pickup on its tile:
 // walk over it to take it. Floors not listed here have furniture that can't be broken.
@@ -121,6 +124,15 @@ const GUNS = {
   tranq:    { name: 'Tranq Pistol',    text: 'Quiet. No damage: puts the target to sleep for 3 turns. Range 5.', action: { type: 'ranged', gun: true, dmg: 0, stun: 3, range: 5, silent: true } },
 };
 const START_GUN = 'silenced';
+// Gun mods fit the gun you carry when you find them, and stay with that gun: +1 damage (a tranq gun sleeps 1 turn
+// longer). At most GUN_MOD_MAX per gun.
+const GUN_MOD_MAX = 2;
+
+// Rewards for doing something: picking a pocket, searching a body, cracking a safe, sometimes a filing cabinet.
+// Floor caches never hold them. When such loot rolls its 'card' share, it's a gun mod GUNMOD_SHARE of the time.
+const GUNMOD_SHARE = 0.35;
+// Chance a filing cabinet's drawer holds a card or a gun mod.
+const CABINET_REWARD_CHANCE = 0.08;
 
 // Floors (0-based) whose exit is locked until you take the keycard from the enemy carrying it.
 const KEYCARD_FLOORS = new Set([1, 2]);
@@ -178,7 +190,7 @@ const EXIT_STEPS = 45;
 
 const FLOORS = [
   { name: 'Pharma Labs',     theme: 'pharma',  cache: 'a medicine cabinet', seed: 1101, w: 40, h: 28, vCorridors: 2,
-    extraDoors: 0.3, enemyChance: 0.35, lootChance: 0.6, guards: 1, cameras: 1, civilians: 5, mix: 'ggd',   loot: { card: 0.15, creds: 0.25, potion: 0.6 } },
+    extraDoors: 0.3, enemyChance: 0.55, lootChance: 0.6, guards: 2, cameras: 1, civilians: 5, mix: 'ggd',   loot: { card: 0.15, creds: 0.25, potion: 0.6 } },
   { name: 'Weapons Foundry', theme: 'weapons', cache: 'a weapons locker',   seed: 2202, w: 46, h: 30, vCorridors: 2,
     extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, cameras: 4, civilians: 3, mix: 'ggddden', backrooms: 1, husks: 4, loot: { card: 0.35, creds: 0.4, potion: 0.25 } },
   { name: 'Meatology',       theme: 'flesh',   cache: 'a reliquary',        seed: 4404, w: 50, h: 34, vCorridors: 3,
@@ -213,9 +225,11 @@ const IMPLANT_SAFE_COUNT = 3;
 // Body parts, with where their marker sits on the side panel's body diagram (viewBox 0 0 100 160).
 const BODY_PARTS = [
   { id: 'brain', name: 'Brain', x: 50, y: 14 },
+  { id: 'eyes',  name: 'Eyes',  x: 50, y: 22 },
   { id: 'skull', name: 'Skull', x: 38, y: 27 },
   { id: 'ears',  name: 'Ears',  x: 63, y: 24 },
   { id: 'spine', name: 'Spine', x: 50, y: 62 },
+  { id: 'arms',  name: 'Arms',  x: 76, y: 70 },
   { id: 'skin',  name: 'Skin',  x: 27, y: 74 },
   { id: 'gut',   name: 'Gut',   x: 57, y: 88 },
 ];
@@ -226,6 +240,8 @@ const IMPLANTS = {
   autophage: { part: 'gut',   name: 'Autophage Gland',      text: 'Searching a body also feeds you from it: heal 3.' },
   spinaltap: { part: 'spine', name: 'Spinal Tap',           text: 'Hack terminals and keypad doors from up to 3 tiles away.' },
   compressed:{ part: 'skull', name: 'Compressed Head',      text: 'In the air ducts every step goes twice as far.' },
+  myomer:    { part: 'arms',  name: 'Myomer Fibres',        text: '+1 Strength: Melee Attack hits 1 harder.' },
+  optic:     { part: 'eyes',  name: 'Targeting Optic',      text: 'Guns reach 2 tiles further.' },
   chameleon: { part: 'skin',  name: 'Dermal Chameleon',     text: 'End a turn without moving and nobody who hasn\'t spotted you can see you (except from right next to you) until your next turn.' },
 };
 const DEFECTS = {

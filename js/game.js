@@ -89,7 +89,7 @@ function atkTiles(s, from, dir) {
   const out = [], seen = new Set();
   const add = (x, y) => {
     const k = key(x, y);
-    if ((isWall(x, y) && !doorAt(x, y) && !vatAt(x, y) && !(s.breach && breakableWall(x, y)) && !(s.type === 'hack' && hackTargetAt(x, y))) || seen.has(k) || (x === from.x && y === from.y)) return;
+    if ((isWall(x, y) && !doorAt(x, y) && !vatAt(x, y) && !(s.dmg > 0 && structureKind(x, y)) && !(s.breach && breakableWall(x, y)) && !(s.type === 'hack' && hackTargetAt(x, y))) || seen.has(k) || (x === from.x && y === from.y)) return;
     seen.add(k); out.push({ x, y });
   };
   if (s.type === 'self') return out;
@@ -324,7 +324,7 @@ function dirTo(x, y) {
   return Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
 }
 
-const atkName = s => [s.dmg ? `Attack ${s.dmg + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
+const atkName = s => [s.dmg ? `Attack ${s.dmg + (s.str && S ? strBonus() : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
   .filter(Boolean).join(' + ');
 const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Terminal, keypad or camera' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
 
@@ -355,7 +355,8 @@ const nextDoc = (pool, kind) => {
 const FLOOR_WRITING_SHARE = 0.7;
 
 function makeFurniture(kind) {
-  const loot = Math.random() < FURNITURE_LOOT_CHANCE * (S.adapt === 'thief' ? 0.5 : 1) ? (Math.random() < 0.4 ? randomPotion() : Math.random() < 0.6 ? randomGadget() : 'creds') : null;
+  let loot = Math.random() < FURNITURE_LOOT_CHANCE * (S.adapt === 'thief' ? 0.5 : 1) ? (Math.random() < 0.4 ? randomPotion() : Math.random() < 0.6 ? randomGadget() : 'creds') : null;
+  if (kind === 'cabinet' && Math.random() < CABINET_REWARD_CHANCE) loot = Math.random() < GUNMOD_SHARE ? 'gunmod' : 'card';
   const theme = FLOORS[S.room].theme === 'weapons' && Math.random() < 0.4 ? 'droids' : FLOORS[S.room].theme, local = FLOOR_WRITING[theme] && Math.random() < FLOOR_WRITING_SHARE;
   if (kind === 'desk') return { kind, searched: false, loot, email: local ? nextDoc(FLOOR_WRITING[theme].emails, 'email-' + theme) : nextDoc(EMAILS, 'email') };
   return { kind, searched: false, loot, doc: Math.random() < 0.2 ? null : local ? nextDoc(FLOOR_WRITING[theme].documents, 'doc-' + theme) : nextDoc(DOCUMENTS, 'doc') };
@@ -741,6 +742,18 @@ function enterCode() {
     S.furn.get(k).opened = true;
     tileEl(kp.x, kp.y).classList.add('searched');
     log('The safe clicks open.');
+    safeLoot(kp);
+  } else {
+    S.codeDoors.delete(k);
+    log('The keypad beeps twice. The door unlocks.');
+    renderCodeDoors(); renderUnits(); renderOverlays();
+  }
+  renderSide();
+}
+
+// What a safe holds: creds, and either an implant to install or a gun to swap.
+function safeLoot(at) {
+  {
     const imp = Object.keys(IMPLANTS).filter(id => !hasImplant(id));
     if (!imp.length || Math.random() >= SAFE_IMPLANT_CHANCE) {
       // A gun in the safe: it goes on the floor where you stand, and you're asked whether to swap.
@@ -753,13 +766,9 @@ function enterCode() {
       setTimeout(() => showModal('An implant in the safe', `Sealed in a sterile case: <b>${IMPLANTS[id].name}</b>. ${IMPLANTS[id].text} It goes in your ${partName(IMPLANTS[id].part)}.${implantWarn(id)}`,
         [['install-' + id, 'Install it'], ['closeread', 'Leave it']]), 0);
     }
-    giveLoot('creds', kp, 'from the safe', '');
-  } else {
-    S.codeDoors.delete(k);
-    log('The keypad beeps twice. The door unlocks.');
-    renderCodeDoors(); renderUnits(); renderOverlays();
+    giveLoot('creds', at, 'from the safe', '');
+    giveLoot(Math.random() < 0.5 ? 'gunmod' : 'card', at, 'from the safe', '');
   }
-  renderSide();
 }
 
 function renderCodeDoors() {
@@ -782,7 +791,7 @@ function floorMap(idx) {
 
 // Start of a run: fresh deck and loot, then floor 1.
 function newRun() {
-  run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: START_CREDS, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gun: START_GUN,
+  run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: START_CREDS, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gun: START_GUN, mods: {},
     seed: Math.floor(Math.random() * 1e6), maps: [], adapt: null, story: [], floorStats: [],
     gear: {}, implants: [], defects: [], notes: [], items: {} };
   godCreds();
@@ -800,7 +809,7 @@ function loadRoom(idx) {
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
     doors: new Map(), keyDoors: new Set(), codeDoors: new Map(), codes: [], planned: false, keypad: null, props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
-    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0,
+    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0, shp: new Map(),
     alarm: 0, reinforceIn: 0, adapt: run.adapt, noiseBonus: run.adapt === 'loud' ? 1 : 0, familiar: hasEcho('staff'), stats: { kills: 0, takedowns: 0, alerts: 0, cameras: 0, alarm: 0, pickpockets: 0, smashed: 0, hacks: 0, loot: 0 },
   };
   let n = 0;
@@ -809,7 +818,7 @@ function loadRoom(idx) {
     S.walls.push([...row].map((c, x) => {
       if (c === 'P') S.player = { id: 'p', x, y, hp: MAX_HP, max: MAX_HP };
       else if (c === 'X') S.exit = { x, y };
-      else if (c === '+') S.doors.set(key(x, y), DOOR_HP);
+      else if (c === '+') S.doors.set(key(x, y), DOOR_HP_BY_FLOOR[idx] || DOOR_HP_BY_FLOOR[DOOR_HP_BY_FLOOR.length - 1]);
       else if (c === 'L') S.keyDoors.add(key(x, y));
       else if (c === 'C') S.codeDoors.set(key(x, y), doorCode);  // the keypad room's doors share one code
       else if (c === 'S') S.furn.set(key(x, y), { kind: 'safe', code: randomCode(), opened: false });
@@ -924,8 +933,16 @@ function pickCard(card, half = 0) {
   render();
 }
 // A half's action as played: Shoot halves become your gun's shot.
-const resolveAction = a => a.type === 'gun' ? GUNS[run.gun].action : a;
-const halfName = h => h.action.type === 'gun' ? GUNS[run.gun].name : h.name;
+const gunMods = id => (run.mods && run.mods[id]) || 0;
+const gunName = id => GUNS[id].name + (gunMods(id) ? ` +${gunMods(id)}` : '');
+function gunAction(id) {
+  const g = GUNS[id].action, m = gunMods(id), out = { ...g };
+  if (m) { if (g.dmg > 0) out.dmg = g.dmg + m; else if (g.stun) out.stun = g.stun + m; }
+  if (out.range && hasImplant('optic')) out.range += 2;
+  return out;
+}
+const resolveAction = a => a.type === 'gun' ? gunAction(run.gun) : a;
+const halfName = h => h.action.type === 'gun' ? gunName(run.gun) : h.name;
 // The half you're playing this turn ({ name, action }).
 const playedHalf = () => S.playing && S.playing.halves[S.half];
 const cardMaxDmg = c => Math.max(...c.halves.map(h => resolveAction(h.action).dmg || 0));
@@ -1002,8 +1019,17 @@ function useSelf() {
 }
 
 // Something this card can affect on that tile: an enemy, a door, or a breakable vat.
-const hasTarget = (s, t) => s.type === 'hack' ? !!hackTargetAt(t.x, t.y) : s.bribe ? !!(enemyAt(t.x, t.y) && canBribe(enemyAt(t.x, t.y))) : (s.type === 'point' && !isWall(t.x, t.y)) || (s.breach && breakableWall(t.x, t.y)) || (s.push && enemyAt(t.x, t.y)) || (!s.pick && !s.breach && enemyAt(t.x, t.y)) || (canHitDoor(s) && doorAt(t.x, t.y)) || (s.dmg > 0 && vatAt(t.x, t.y));
+const hasTarget = (s, t) => s.type === 'hack' ? !!hackTargetAt(t.x, t.y) : s.bribe ? !!(enemyAt(t.x, t.y) && canBribe(enemyAt(t.x, t.y))) : (s.type === 'point' && !isWall(t.x, t.y)) || (s.breach && breakableWall(t.x, t.y)) || (s.push && enemyAt(t.x, t.y)) || (!s.pick && !s.breach && enemyAt(t.x, t.y)) || (canHitDoor(s) && doorAt(t.x, t.y)) || (s.dmg > 0 && smashable(t.x, t.y));
 
+function structureKind(x, y) {
+  const k = key(x, y);
+  if (S.keyDoors.has(k)) return 'keydoor';
+  if (S.codeDoors.has(k)) return 'codedoor';
+  const f = S.furn.get(k);
+  if (f) return STRUCTURE_HP[f.kind] ? f.kind : null;
+  return breakableWall(x, y) ? 'wall' : null;
+}
+const smashable = (x, y) => doorAt(x, y) || vatAt(x, y) || !!structureKind(x, y);
 const breakableWall = (x, y) => x > 0 && y > 0 && x < S.w - 1 && y < S.h - 1 && S.walls[y][x] && !S.props.has(key(x, y)) && !S.furn.has(key(x, y)) && !S.grates.has(key(x, y));
 
 // The tiles a click on (x, y) would hit with the picked card, or null if that click isn't a use of it.
@@ -1027,7 +1053,7 @@ async function onTileClick(x, y) {
   const a = S.act, P = S.player;
   if (S.throwing) return throwAt(x, y);
   if (S.inDuct) return ductClick(x, y);
-  if (a.atk && !a.atkUsed && (a.atk.type === 'hack' || a.atk.bribe)) { const hit = attackHit(a.atk, x, y); if (hit) return useAttack(hit); }
+  if (a.atk && !a.atkUsed && (a.atk.type === 'hack' || a.atk.bribe || (a.atk.dmg > 0 && structureKind(x, y)))) { const hit = attackHit(a.atk, x, y); if (hit) return useAttack(hit); }
   if (S.furn.has(key(x, y))) return searchFurniture(x, y);
   if (S.grates.has(key(x, y))) return enterDuct(x, y);
   if (S.keyDoors.has(key(x, y))) return swipeKeycard(x, y);
@@ -1073,12 +1099,13 @@ async function useAttack(hit) {
   if (s.type === 'hack') { S.busy = true; return hackAt(hit[0]); }
   if (s.bribe) return bribe(enemyAt(hit[0].x, hit[0].y));
   {
-    if (s.dmg > 0) s = { ...s, dmg: s.dmg + (s.str ? serumBonus("strength") : 0) };
+    if (s.dmg > 0) s = { ...s, dmg: s.dmg + (s.str ? strBonus() : 0) };
     const targets = hit.map(t => !s.pick && enemyAt(t.x, t.y)).filter(Boolean);
     const doors = hit.filter(t => canHitDoor(s) && doorAt(t.x, t.y));
     const vats = hit.filter(t => s.dmg > 0 && vatAt(t.x, t.y));
+    const structs = hit.filter(t => s.dmg > 0 && structureKind(t.x, t.y));
     S.busy = true; renderOverlays();
-    const first = targets[0] || doors[0] || vats[0] || hit[0];
+    const first = targets[0] || doors[0] || vats[0] || structs[0] || hit[0];
     if (s.type === 'point' && s.ignite) { ignite(first.x, first.y); makeNoise(first.x, first.y, NOISE.shape, P); log('Incinerate: a jet of fire.'); }
     else if (s.type === 'point') { showNoise(first.x, first.y, s.noise); makeNoise(first.x, first.y, s.noise, first); log(`You toss a coin into the ${areaName(first.x, first.y)}.`); }
     else if (s.type === 'ranged') { sfx(s.silent || !s.dmg ? 'puff' : 'bang'); await shot(P, first); }
@@ -1087,6 +1114,9 @@ async function useAttack(hit) {
     if (s.breach && !doors.length && breakableWall(first.x, first.y)) blowWall(first.x, first.y);
     for (const d of doors) hitDoor(d, s);
     for (const v of vats) hitVat(v, s);
+    let rebuild = false;
+    for (const st of structs) if (hitStructure(st, s)) rebuild = true;
+    if (rebuild) { buildBoard(); render(); renderCorpses(); }
     for (const e of targets) {
       if (s.steal) pickpocket(e);
       if (s.push) await shove(e, [e.x - P.x, e.y - P.y], s.push);
@@ -1111,10 +1141,10 @@ async function useAttack(hit) {
     if (s.stun) for (const e of targets) if (S.liquids.get(key(e.x, e.y)) === 'blood')
       for (const o of S.enemies) if (o !== e && !o.stunned && manh(o, e) <= 2 && S.liquids.get(key(o.x, o.y)) === 'blood') { o.stunned = s.stun; floatText(o, 'ARC', 'stun'); log(`The charge arcs through the blood into ${nameOf(o)}.`); }
     // Noise: silenced shots, stuns and picks are quiet; a kill on someone who never saw you is a takedown.
-    const dealt = s.dmg > 0 && (targets.length || doors.length || vats.length);
+    const dealt = s.dmg > 0 && (targets.length || doors.length || vats.length || structs.length);
     const takedown = targets.length && targets.every(e => e.hp <= 0 && e.wasUnaware);
     const loud = s.silent ? 0 : (s.type === 'ranged' || s.gun) && s.dmg > 0 ? NOISE.gun : !dealt ? 0
-      : doors.length || vats.length ? NOISE.smash : s.type === 'shape' ? NOISE.shape : takedown ? NOISE.takedown : NOISE.melee;
+      : doors.length || vats.length || structs.length ? NOISE.smash : s.type === 'shape' ? NOISE.shape : takedown ? NOISE.takedown : NOISE.melee;
     if (takedown) S.stats.takedowns += targets.length;
     if (loud) makeNoise(P.x, P.y, loud, P);
     renderUnits(); renderOverlays();
@@ -1144,6 +1174,36 @@ async function shove(e, dir, n) {
 }
 
 // Breaching: the wall tile becomes floor. Loud, and the alarm rises.
+// Hits a smashable structure. Returns true when it broke and the board needs rebuilding.
+function hitStructure(t, s) {
+  const kind = structureKind(t.x, t.y), k = key(t.x, t.y);
+  if (!kind) return false;
+  const dmg = rollDmg(s.dmg), hp = (S.shp.has(k) ? S.shp.get(k) : STRUCTURE_HP[kind]) - dmg;
+  floatText(t, '-' + dmg, 'dmg');
+  const name = { keydoor: 'keycard door', codedoor: 'keypad door', wall: 'wall', vending: 'vending machine', husk: 'droid husk' }[kind] || kind;
+  if (hp > 0) { S.shp.set(k, hp); log(`You hit the ${name}.`); return false; }
+  S.shp.delete(k);
+  S.stats.smashed++;
+  sfx('smash');
+  if (kind === 'keydoor') { S.keyDoors.delete(k); log('You smash the keycard door off its rails.'); renderKeyDoors(); return false; }
+  if (kind === 'codedoor') { S.codeDoors.delete(k); log('You smash the keypad door in.'); renderCodeDoors(); return false; }
+  if (kind === 'wall') { S.walls[t.y][t.x] = false; log('You break through the wall.'); return true; }
+  // Furniture: it spills what it held, then it's just floor.
+  const f = S.furn.get(k);
+  S.furn.delete(k);
+  S.walls[t.y][t.x] = false;
+  log(`You smash the ${name}.`);
+  if ((f.kind === 'desk' || f.kind === 'cabinet') && !f.searched) {
+    if (f.story) { run.story[S.room] = true; const doc = f.story; setTimeout(() => showModal('In the wreckage', 'A page survives.', [['closeread', 'Close']], doc.kind === 'email' ? `<div class="doc mail story"><div class="doc-head">From: ${doc.from}<br>Subject: ${doc.subject}</div><p>${doc.body}</p></div>` : `<div class="doc paper story">${doc.title ? `<div class="doc-head">${doc.title}</div>` : ''}<p>${doc.body}</p></div>`), 0); }
+    if (f.clue) learnClue(f.clue);
+    if (f.loot) giveLoot(f.loot, t, `from the broken ${name}`, '');
+  }
+  if (f.kind === 'safe' && !f.opened) safeLoot(t);
+  if (f.kind === 'vending') { giveLoot(randomPotion(), t, 'from the broken machine', ''); giveLoot(randomGadget(), t, 'from the broken machine', ''); }
+  if (f.kind === 'terminal') log('It dies in a shower of sparks. No more hacking that one.');
+  return true;
+}
+
 function blowWall(x, y) {
   S.walls[y][x] = false;
   S.stats.smashed++;
@@ -1222,11 +1282,11 @@ function givePotion(kind, at, from) {
   renderSide();
 }
 
-// Rolls odds {card, creds, potion}: returns 'creds', one of POTIONS or gadgets, or null (nothing). (The card share
-// pays out as creds: cards come only from the lift.)
-function rollLoot(odds) {
+// Rolls odds {card, creds, potion}: returns 'card', 'gunmod', 'creds', one of POTIONS or gadgets, or null (nothing).
+// `earned` = pockets, bodies, safes: there the card share pays out as a card or a gun mod. Elsewhere it's creds.
+function rollLoot(odds, earned) {
   let roll = Math.random();
-  if (roll < odds.card) return 'creds';  // cards only come from the lift
+  if (roll < odds.card) return earned ? (Math.random() < GUNMOD_SHARE ? 'gunmod' : 'card') : 'creds';
   roll -= odds.card;
   if (roll < odds.creds) return 'creds';
   roll -= odds.creds;
@@ -1235,9 +1295,24 @@ function rollLoot(odds) {
 
 // Gives one loot result. `at` is where the pop-up text appears; `from` finishes the log line
 // ("from Ganger", "from a medicine cabinet").
-function giveLoot(what, at, from, emptyMsg) {
+function giveLoot(what, at, from, emptyMsg) {  // (what may be upgraded below)
   if (what) { S.stats.loot++; sfx('pickup'); }
-  if (what === 'card' || what === 'creds') {
+  const owned = new Set(deck.map(c => c.id)), pool = REWARD_CARDS.filter(c => !owned.has(c.id));
+  if (what === 'gunmod' && gunMods(run.gun) >= GUN_MOD_MAX) what = pool.length ? 'card' : 'creds';
+  if (what === 'card' && pool.length) {
+    const card = pool[Math.floor(Math.random() * pool.length)];
+    deck = [...deck, card];
+    S.cards.push({ ...card, used: false });
+    floatText(at, '+CARD', 'stun');
+    log(`You take a card ${from}: <b>${card.name}</b>.`);
+    toast(`New card: <b>${card.name}</b>. It's yours for the run.`);
+    renderHand();
+  } else if (what === 'gunmod') {
+    run.mods[run.gun] = gunMods(run.gun) + 1;
+    floatText(at, '+MOD', 'stun');
+    log(`You take a gun mod ${from} and fit it to your ${GUNS[run.gun].name}: now <b>${gunName(run.gun)}</b>.`);
+    renderHand();
+  } else if (what === 'card' || what === 'creds') {
     const n = 5 + Math.floor(Math.random() * 11);
     run.creds += n;
     floatText(at, `+¥${n}`, 'stun');
@@ -1253,7 +1328,7 @@ function giveLoot(what, at, from, emptyMsg) {
   renderSide();
 }
 
-const grantLoot = (at, odds, from, emptyMsg) => giveLoot(rollLoot(odds), at, from, emptyMsg);
+const grantLoot = (at, odds, from, emptyMsg) => giveLoot(rollLoot(odds, true), at, from, emptyMsg);
 
 // Each room cache's contents are decided when the floor loads, so its icon shows what's inside.
 // Walking onto it takes it.
@@ -1273,6 +1348,8 @@ function useStim() {
   renderSide();
 }
 
+// Extra Strength: the serum while it lasts, and Myomer Fibres.
+const strBonus = () => serumBonus('strength') + (hasImplant('myomer') ? 1 : 0);
 const serumBonus = kind => S.buff[kind] > 0 ? SERUMS[kind].bonus : 0;
 
 // Drinking a serum counts this turn as the first of its turns; a second dose adds more turns.
@@ -1336,7 +1413,7 @@ const randomGun = () => { const ids = Object.keys(GUNS).filter(id => id !== run.
 function offerGun(id, k) {
   S.gunOffer = { id, k };
   const g = GUNS[id], mine = GUNS[run.gun];
-  showModal(g.name, `${g.text}<br><br>You carry the <b>${mine.name}</b>: ${mine.text} Every Shoot half fires the gun you carry. Swap? Your old one stays here.`,
+  showModal(gunName(id), `${g.text}${gunMods(id) ? ` It carries ${gunMods(id)} mod${gunMods(id) > 1 ? 's' : ''}.` : ''}<br><br>You carry the <b>${gunName(run.gun)}</b>: ${mine.text} Every Shoot half fires the gun you carry, and mods stay on their gun. Swap? Your old one stays here.`,
     [['takegun', 'Swap guns'], ['closeread', 'Leave it']]);
 }
 
@@ -1349,7 +1426,7 @@ function takeGun() {
   S.drops.set(o.k, 'gun-' + old);
   S.gunOffer = null;
   sfx('pickup');
-  log(`You take the <b>${GUNS[o.id].name}</b> and leave your ${GUNS[old].name} on the floor.`);
+  log(`You take the <b>${gunName(o.id)}</b> and leave your ${gunName(old)} on the floor.`);
   if (S.playing && playedHalf().action.type === 'gun' && !S.act.atkUsed) S.act.atk = resolveAction(playedHalf().action);
   renderDrops(); render();
 }
@@ -1380,7 +1457,7 @@ function hitDoor(t, s) {
 function dropCorpse(e) {
   const k = key(e.x, e.y), old = S.corpses.get(k);
   if (!S.liquids.has(k)) { S.liquids.set(k, ENEMY_TYPES[e.kind].machine ? 'oil' : 'blood'); renderLiquids(); }
-  const loot = e.robbed ? null : rollLoot(LOOT_ODDS);
+  const loot = e.robbed ? null : rollLoot(LOOT_ODDS, true);
   S.corpses.set(k, { kind: e.kind, hasKey: !!e.hasKey || !!(old && old.hasKey), loot: (old && !old.searched && old.loot) || loot, searched: false });
   e.hasKey = false;
   renderCorpses();
@@ -2208,7 +2285,6 @@ function renderDoors() {
   for (const [k, hp] of S.doors) {
     const t = tileEl(...unkey(k));
     t.classList.add('door');
-    t.innerHTML = `<span>${hp}</span>`;
   }
 }
 
@@ -2389,7 +2465,7 @@ function renderOverlays() {
     const tiles = atkTiles(spec, P, dir);
     if (dir) return mark(tiles, 'preview');
     mark(tiles.filter(t => !cls.has(key(t.x, t.y))), 'range');  // faint range never hides a blue move tile
-    mark(tiles.filter(t => spec.type !== 'point' && hasTarget(spec, t)), 'target');
+    mark(tiles.filter(t => spec.type !== 'point' && hasTarget(spec, t) && structureKind(t.x, t.y) !== 'wall'), 'target');
   };
   // Blue: where you can still move. Red on top: what the picked (or hovered) card can hit.
   if (S.phase === 'turn' && !S.busy && S.throwing) mark(throwTiles(S.throwing), 'target');
@@ -2435,7 +2511,7 @@ function bodyHTML() {
     return `<div class="row" title="${tip(p)}"><span>${p.name}</span><b class="${i ? '' : 'empty'}">${i ? IMPLANTS[i].name : '—'}</b></div>` +
       (d ? `<div class="row defect" title="${tip(p)}"><span></span><b class="lost">${DEFECTS[d].name}</b></div>` : ''); }).join('');
   return `<div class="panel body">
-    <div class="row stats"><span>Strength <b>${run.char.strength + serumBonus("strength")}</b></span><span>Move <b>${moveStat()}</b></span></div>
+    <div class="row stats"><span>Strength <b>${run.char.strength + strBonus()}</b></span><span>Move <b>${moveStat()}</b></span></div>
     <svg class="figure" viewBox="0 0 100 160" aria-label="Your body and its implants">
       <g class="sil"><circle cx="50" cy="20" r="14"/><rect x="44" y="33" width="12" height="8"/>
         <path d="M28 42h44l6 52h-12l-2 64h-11l-3-44-3 44h-11l-2-64h-12z"/><path d="M28 42l-10 46 7 2 9-36zM72 42l10 46-7 2-9-36z"/></g>
@@ -2460,7 +2536,7 @@ function renderSide() {
     <div class="panel">
       <div class="row"><span>Creds</span><b>¥${fmtMove(run.creds)}</b></div>
       ${S.codes.length ? `<div class="note">Codes found:</div>${S.codes.map(c => `<div class="row"><span>${c.label}</span><b>${c.code}</b></div>`).join("")}` : ""}
-      <div class="row" title="${GUNS[run.gun].text}"><span>Gun</span><b>${GUNS[run.gun].name}</b></div>
+      <div class="row" title="${GUNS[run.gun].text}${gunMods(run.gun) ? ` Mods: +${gunMods(run.gun)}.` : ''}"><span>Gun</span><b>${gunName(run.gun)}</b></div>
       ${run.stims ? `<div class="row" title="Heals 1 a turn for ${STIM_TURNS} turns"><span>Healing stim${run.stims > 1 ? ` ×${run.stims}` : ''}</span><b><button class="mini-btn" data-act="stim" ${canUseItem ? '' : 'disabled'}>Use</button></b></div>` : ''}
       ${S.regen ? `<div class="buff">Healing stim: +1 HP at the start of your next ${S.regen} turn${S.regen > 1 ? 's' : ''}</div>` : ''}
       ${Object.entries(SERUMS).map(([kind, sv]) => `
@@ -2580,7 +2656,7 @@ function describeTile(x, y) {
   if (f) out.push({ desk: 'Desk', cabinet: 'Cabinet', safe: f.opened ? 'Safe (open)' : 'Safe', vending: 'Vending machine', terminal: 'Terminal',
     husk: 'Droid husk', altar: 'Altar', stairs: 'Fire stairs', contact: 'Contact', phone: 'Phone' }[f.kind]);
   if (S.grates.has(k) && !S.inDuct) out.push('Vent grate');
-  if (doorAt(x, y)) out.push(`Door (${S.doors.get(k)} HP)`);
+  if (doorAt(x, y)) out.push('Door');
   if (S.keyDoors.has(k)) out.push('Keycard door');
   if (S.codeDoors.has(k)) out.push('Keypad door');
   if (S.vats.has(k)) out.push(S.breakable.name[0].toUpperCase() + S.breakable.name.slice(1));

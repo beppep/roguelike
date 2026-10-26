@@ -660,6 +660,7 @@ function renderDucts(reach) {
 function giveGadget(id, at, from) {
   run.items[id] = (run.items[id] || 0) + 1;
   floatText(at, '+' + GADGETS[id].name.toUpperCase(), 'heal');
+  gain(`<b>${GADGETS[id].name}</b>: ${GADGETS[id].text}`);
   log(`You take a <b>${GADGETS[id].name}</b> ${from}. ${GADGETS[id].text}`);
   renderSide();
 }
@@ -733,9 +734,11 @@ const VENDING_STOCK = [
 ];
 
 function openShop() {
+  const got = S.shopGot ? `<p class="shop-got">It drops: ${S.shopGot}</p>` : '';
+  S.shopGot = '';
   const rows = VENDING_STOCK.map(v => `<button data-act="buy-${v.item}" ${run.creds < v.price ? 'disabled' : ''}>${v.name}: ¥${v.price}</button>`).join('');
   showModal('Vending machine', `You have ¥${fmtMove(run.creds)}. The machine hums. One of the slots holds something that blinks back at you.`,
-    [['closeread', 'Done']], `<div class="shop">${rows}<button class="gacha" data-act="gacha" ${run.creds < GACHA_PRICE ? 'disabled' : ''}>The blinking slot: ¥${GACHA_PRICE}, something random</button></div>`);
+    [['closeread', 'Done']], `${got}<div class="shop">${rows}<button class="gacha" data-act="gacha" ${run.creds < GACHA_PRICE ? 'disabled' : ''}>The blinking slot: ¥${GACHA_PRICE}, something random</button></div>`);
 }
 
 function gacha() {
@@ -743,7 +746,9 @@ function gacha() {
   run.creds -= GACHA_PRICE;
   const r = Math.random();
   log('You feed the blinking slot. It thinks about it.');
+  S.lastGain = '';
   giveLoot(r < 0.5 ? randomGadget() : r < 0.85 ? randomPotion() : 'creds', S.player, 'from the blinking slot', '');
+  S.shopGot = S.lastGain;
   openShop();
 }
 
@@ -752,6 +757,7 @@ function buy(item) {
   if (!v || run.creds < v.price) return;
   run.creds -= v.price;
   if (GADGETS[item]) giveGadget(item, S.player, 'from the vending machine'); else givePotion(item, S.player, 'from the vending machine');
+  S.shopGot = S.lastGain;
   openShop();
 }
 
@@ -900,7 +906,7 @@ function loadRoom(idx) {
   if (deck.length > DECK_SIZE) return chooseKeep(idx);
   S = {
     room: idx, w: rows[0].length, h: rows.length, walls: [], enemies: [], player: null,
-    cards: deck.map(c => ({ ...c, used: false })), burned: 0, playing: null,
+    cards: deck.map(c => ({ ...c, used: false, fresh: c.id === run.freshCard })), burned: 0, playing: null,
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
     doors: new Map(), keyDoors: new Set(), codeDoors: new Map(), codes: [], planned: false, keypad: null, props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
@@ -940,6 +946,7 @@ function loadRoom(idx) {
     }));
   });
   S.nextId = n;
+  run.freshCard = null;
   if (hasDefect('misfire')) { const c = S.cards[Math.floor(Math.random() * S.cards.length)]; c.used = true; run.notes.push(`Misfire: <b>${c.name}</b> starts this floor used.`); }
   S.enemies.forEach(initFacing);
   // Keycard floors: about a third of the staff carry a keycard (at least 2). Any one of them will do.
@@ -1025,6 +1032,7 @@ function pickCard(card, half = 0) {
   S.hoverDir = null; S.preview = null;
   if (S.playing === card && S.half === half) { S.playing = null; S.act.atk = null; return render(); }
   S.playing = card; S.half = half; S.act.atk = resolveAction(card.halves[half].action);
+  card.fresh = false;
   if (S.act.atk.type === 'self') return useSelf();
   render();
 }
@@ -1434,11 +1442,13 @@ function givePotion(kind, at, from) {
   if (kind === 'stim') {
     run.stims++;
     floatText(at, '+STIM', 'heal');
+    gain('<b>Healing stim</b> (heals 1 a turn for 3 turns)');
     log(`You take a <b>healing stim</b> ${from}. Use it from the panel on the right: it heals 1 a turn for ${STIM_TURNS} turns.`);
   } else {
     const sv = SERUMS[kind];
     run[kind]++;
     floatText(at, '+SERUM', 'heal');
+    gain(`<b>${sv.name}</b> (+${sv.bonus} ${sv.desc} for ${sv.turns} turns)`);
     log(`You take a <b>${sv.name}</b> ${from}: +${sv.bonus} ${sv.desc} for ${sv.turns} turns. Use it from the panel on the right.`);
   }
   renderSide();
@@ -1457,6 +1467,19 @@ function rollLoot(odds, earned) {
 
 // Gives one loot result. `at` is where the pop-up text appears; `from` finishes the log line
 // ("from Ganger", "from a medicine cabinet").
+// What you just got, in a short stack at the bottom of the map (each line fades after a few seconds).
+function gain(html) {
+  S.lastGain = html;
+  const feed = $('#feed');
+  if (!feed) return;
+  const el = document.createElement('div');
+  el.innerHTML = '+ ' + html;
+  feed.appendChild(el);
+  while (feed.children.length > 5) feed.firstChild.remove();
+  setTimeout(() => el.classList.add('gone'), 3800);
+  setTimeout(() => el.remove(), 4500);
+}
+
 function giveLoot(what, at, from, emptyMsg) {  // (what may be upgraded below)
   if (what) { S.stats.loot++; sfx('pickup'); }
   const owned = new Set(deck.map(c => c.id)), pool = REWARD_CARDS.filter(c => !owned.has(c.id));
@@ -1464,8 +1487,9 @@ function giveLoot(what, at, from, emptyMsg) {  // (what may be upgraded below)
   if (what === 'card' && pool.length) {
     const card = pool[Math.floor(Math.random() * pool.length)];
     deck = [...deck, card];
-    S.cards.push({ ...card, used: false });
+    S.cards.push({ ...card, used: false, fresh: true });
     floatText(at, '+CARD', 'stun');
+    gain(`New card: <b>${card.name}</b> (rightmost in your hand)`);
     log(`You take a card ${from}: <b>${card.name}</b>.`);
     toast(`New card: <b>${card.name}</b>. It's yours for the run.`);
     renderHand();
@@ -1473,12 +1497,14 @@ function giveLoot(what, at, from, emptyMsg) {  // (what may be upgraded below)
     run.mods[run.gun] = gunMods(run.gun) + 1;
     floatText(at, '+MOD', 'stun');
     log(`You take a gun mod ${from} and fit it to your ${GUNS[run.gun].name}: now <b>${gunName(run.gun)}</b>.`);
+    gain(`Gun mod: your gun is now <b>${gunName(run.gun)}</b>`);
     renderHand();
   } else if (what === 'card' || what === 'creds') {
     const n = 5 + Math.floor(Math.random() * 11);
     run.creds += n;
     floatText(at, `+¥${n}`, 'stun');
     log(`You take ¥${n} creds ${from}.`);
+    gain(`¥${n}`);
   } else if (GADGETS[what]) {
     giveGadget(what, at, from);
   } else if (POTIONS.includes(what)) {
@@ -1486,6 +1512,7 @@ function giveLoot(what, at, from, emptyMsg) {  // (what may be upgraded below)
   } else {
     floatText(at, 'EMPTY', 'stun');
     log(emptyMsg);
+    S.lastGain = 'nothing';
   }
   renderSide();
 }
@@ -1589,6 +1616,7 @@ function takeGun() {
   S.gunOffer = null;
   sfx('pickup');
   log(`You take the <b>${gunName(o.id)}</b> and leave your ${gunName(old)} on the floor.`);
+  gain(`Gun: <b>${gunName(o.id)}</b>. ${GUNS[o.id].text}`);
   if (S.playing && playedHalf().action.type === 'gun' && !S.act.atkUsed) S.act.atk = resolveAction(playedHalf().action);
   renderDrops(); render();
 }
@@ -2230,7 +2258,7 @@ function takeOffer(i) {
   const o = S.liftOffers && S.liftOffers[i];
   if (!o) return;
   S.liftOffers = null;
-  if (o.kind === 'card') deck = [...deck, o.card];
+  if (o.kind === 'card') { deck = [...deck, o.card]; run.freshCard = o.card.id; }
   else if (o.kind === 'gear') { run.gear[GEAR[o.id].slot] = o.id; run.notes.push(`You put on the <b>${GEAR[o.id].name}</b>: ${GEAR[o.id].text}`); }
   else if (o.kind === 'implant') installImplant(o.id);
   else if (o.kind === 'stims') run.stims += o.n;
@@ -2249,6 +2277,7 @@ function installImplant(id) {
   run.implants.push(id);
   syncMaxHp();
   run.notes.push(`Installed <b>${IMPLANTS[id].name}</b> in your ${partName(IMPLANTS[id].part)}: ${IMPLANTS[id].text}`);
+  if (S) gain(`Implant: <b>${IMPLANTS[id].name}</b> (${partName(IMPLANTS[id].part)})`);
   if (grew && run.implants.length > IMPLANT_SAFE_COUNT) {
     const pool = Object.keys(DEFECTS).filter(d => !hasDefect(d));
     const d = pool[Math.floor(Math.random() * pool.length)];
@@ -2869,10 +2898,10 @@ function renderHand() {
   h.classList.toggle('choose', S.phase === 'turn' && !S.playing && !S.act.atkUsed);
   h.classList.toggle('done', S.phase === 'turn' && S.act.atkUsed);
   const spent = S.phase === 'turn' && S.act.atkUsed;
-  for (const c of [...S.cards].sort((a, b) => a.id - b.id)) {
+  for (const c of S.cards) {
     const el = document.createElement('div');
     const picked = S.phase === 'burn' ? S.sel === c : c === S.playing && !spent;
-    el.className = 'card' + (c.used || (c === S.playing && spent) ? ' used' : '') + (picked ? ' sel' : '');
+    el.className = 'card' + (c.used || (c === S.playing && spent) ? ' used' : '') + (picked ? ' sel' : '') + (c.fresh ? ' fresh' : '');
     el.innerHTML = cardHTML(c, picked && S.phase === 'turn' ? S.half : -1);
     // A fan: cards tilt away from the middle and sit a little lower toward the edges.
     const off = h.children.length - (S.cards.length - 1) / 2;
@@ -2990,6 +3019,7 @@ document.addEventListener('click', e => {
   else if (act === 'sheet') showSheet();
   else if (act === 'takegun') takeGun();
   else if (act === 'god') toggleGod();
+  else if (act === 'ascend') { if (godMode && S.phase !== 'over') { $('#modal').hidden = true; S.inDuct = false; log('God mode: you ascend.'); roomCleared(); } }
   else if (act === 'howto') showHowTo();
   else if (act === 'gacha') gacha();
   else if (act === 'bribe') payBribe();

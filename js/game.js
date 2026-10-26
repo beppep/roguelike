@@ -193,7 +193,7 @@ function checkSight() {
   for (const e of S.enemies) {
     if (e.alerted) continue;
     if (!isCamera(e)) noticeBody(e);
-    if (e.alerted || S.inDuct || !sees(e, S.player)) continue;
+    if (e.alerted || e.ally > 0 || S.inDuct || !sees(e, S.player)) continue;
     if (S.hidden && manh(e, S.player) > 1) continue;
     if (S.ghost) continue;
     if (e.bribed) continue;
@@ -431,7 +431,9 @@ function hackTargetAt(x, y) {
   if (f && f.kind === 'terminal' && near) return 'terminal';
   if (S.codeDoors.has(key(x, y)) && near) return 'keypad';
   const e = enemyAt(x, y);
-  if (e && isCamera(e) && d <= 5 && los(P, e) && !(e.looped > 0)) return 'camera';
+  if (e && isCamera(e) && d <= HACK_FAR && los(P, e) && !(e.looped > 0)) return 'camera';
+  if (e && ENEMY_TYPES[e.kind].machine && !isCamera(e) && d <= HACK_FAR && los(P, e) && !(e.ally > 0)) return 'machine';
+  if (S.trips.has(key(x, y)) && d <= HACK_FAR && los(P, { x, y })) return 'laser';
   return null;
 }
 
@@ -439,6 +441,66 @@ function traceRisk() {
   S.stats.hacks++;
   sfx('hack');
   if (!hasGear('jammer') && Math.random() < TRACE_CHANCE) { log('<b>Traced.</b> The Head\'s ICE follows the connection back to you. The alarm rises.'); raiseAlarm(1); }
+}
+
+// The hacked thing flickers for a moment.
+function glitch(el) { if (!el) return; el.classList.remove('glitch'); void el.offsetWidth; el.classList.add('glitch'); setTimeout(() => el.classList.remove('glitch'), 650); }
+
+function machineHack(how) {
+  const m = S.machineHack;
+  $('#modal').hidden = true;
+  if (!m || m.hp <= 0 || S.act.atkUsed) return;
+  S.machineHack = null;
+  traceRisk();
+  const r = unitEls.get(m.id);
+  if (r) glitch(r.el);
+  if (how === 'shut') {
+    m.stunned = SHUTDOWN_TURNS; m.aim = null;
+    floatText(m, 'OFFLINE', 'hack');
+    log(`You shut the ${nameOf(m)} down.`);
+  } else if (how === 'hijack') {
+    m.ally = HIJACK_TURNS; m.alerted = false; m.suspicious = null; m.intent = null; m.aim = null; m.fleeing = false;
+    floatText(m, 'HIJACKED', 'hack');
+    log(`The ${nameOf(m)} is yours for ${HIJACK_TURNS} turns.`);
+  } else {
+    floatText(m, 'OVERLOAD', 'dmg');
+    log(`The ${nameOf(m)} whines, then bursts.`);
+    sfx('boom');
+    showNoise(m.x, m.y, NOISE.gun); makeNoise(m.x, m.y, NOISE.gun, m, true);
+    const at = { x: m.x, y: m.y };
+    damage(m, m.hp);
+    for (const u of [S.player, ...S.enemies]) if (u.hp > 0 && Math.max(Math.abs(u.x - at.x), Math.abs(u.y - at.y)) <= 1) { damage(u, OVERLOAD_DMG); if (u !== S.player && u.hp > 0) alertEnemy(u); }
+    for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (FLAMMABLE.has(S.liquids.get(key(at.x + dx, at.y + dy)))) ignite(at.x + dx, at.y + dy);
+    if (S.player.hp <= 0) return;
+    if (!S.enemies.some(isHostile)) { hackDone(); return roomCleared(); }
+  }
+  hackDone();
+}
+
+// A hijacked machine: goes for the nearest of its old friends and shoots or hits it with its first intent.
+async function allyTurn(e) {
+  e.ally--;
+  const it = ENEMY_TYPES[e.kind].intents[0], P = S.player;
+  const foes = S.enemies.filter(o => o !== e && !(o.ally > 0) && isHostile(o) && manh(o, e) <= 12);
+  const best = foes.sort((a, b) => manh(a, e) - manh(b, e))[0];
+  if (best) {
+    const canHit = (x, y) => it.range ? manh({ x, y }, best) <= it.range && los({ x, y }, best) : manh({ x, y }, best) === 1;
+    if (!canHit(e.x, e.y) && it.move) {
+      const { dist, prev } = bfs(e.x, e.y, (x, y) => !enemyBlocked(x, y) && !enemyAt(x, y) && !(x === P.x && y === P.y));
+      let goal = null, score = Infinity;
+      for (const [k, dd] of dist) { const [x, y] = unkey(k), sc = (canHit(x, y) ? 0 : 1000 + manh({ x, y }, best) * 10) + dd; if (sc < score) { score = sc; goal = [x, y]; } }
+      if (goal) await walk(e, pathTo(prev, e.x, e.y, goal[0], goal[1]).slice(0, it.move));
+    }
+    if (canHit(e.x, e.y) && it.atk > 0) {
+      if (it.range) await shot(e, best); else await lunge(e, best);
+      const dmg = rollDmg(it.atk);
+      log(`Your hijacked ${nameOf(e).toLowerCase()} hits ${nameOf(best)} for ${dmg}.`);
+      damage(best, dmg);
+      if (best.hp > 0 && !best.alerted && !isCamera(best)) { best.suspicious = { x: e.x, y: e.y, turns: INVESTIGATE_TURNS }; best.atTarget = false; }
+    }
+  }
+  if (e.ally <= 0) { e.ally = 0; log(`The ${nameOf(e).toLowerCase()} shakes off your hijack.`); floatText(e, 'FREE', 'stun'); }
+  await pause(120);
 }
 
 // Spends this turn's Hack. Called once a hack has actually happened.
@@ -454,11 +516,33 @@ function hackAt(t) {
     renderCodeDoors(); renderUnits();
     return hackDone();
   }
+  if (what === 'laser') {
+    // The whole beam: every tripwire tile joined to this one.
+    const beam = [key(t.x, t.y)];
+    for (let i = 0; i < beam.length; i++) { const [bx, by] = unkey(beam[i]); for (const [dx, dy] of DIRS) { const nk = key(bx + dx, by + dy); if (S.trips.has(nk) && !beam.includes(nk)) beam.push(nk); } }
+    for (const k of beam) { S.trips.delete(k); const [bx, by] = unkey(k); tileEl(bx, by).classList.remove('trip'); glitch(tileEl(bx, by)); }
+    traceRisk();
+    floatText(t, 'HACKED', 'hack');
+    log('The laser beam flickers and goes dark.');
+    return hackDone();
+  }
+  if (what === 'machine') {
+    const m = enemyAt(t.x, t.y), n = ENEMY_TYPES[m.kind].name.toLowerCase();
+    S.machineHack = m;
+    S.busy = false;
+    return showModal(`Hacking the ${n}`, 'You are in its head. What should it do?', [['closeread', 'Disconnect']],
+      `<div class="terminal-menu">
+        <button class="hack" data-act="mhack-shut"><b>Shut down</b><small>It goes offline for ${SHUTDOWN_TURNS} turns: no moving, no seeing.</small></button>
+        <button class="hack" data-act="mhack-hijack"><b>Hijack</b><small>For ${HIJACK_TURNS} turns it fights for you: it goes after the nearest of its friends.</small></button>
+        <button class="hack" data-act="mhack-boom"><b>Overload</b><small>It explodes: ${OVERLOAD_DMG} damage to everyone next to it (you too) and fire on any oil. Loud.</small></button>
+      </div>${hasGear('jammer') ? '' : `<p class="small">${Math.round(TRACE_CHANCE * 100)}% chance to be traced (alarm +1).</p>`}`);
+  }
   if (what === 'camera') {
     const c = enemyAt(t.x, t.y);
     c.looped = CAMERA_LOOP_ROUNDS;
     traceRisk();
-    floatText(c, 'LOOPED', 'stun');
+    floatText(c, 'LOOPED', 'hack');
+    glitch(unitEls.get(c.id).el);
     log(`You loop the camera's feed for ${CAMERA_LOOP_ROUNDS} rounds.`);
     renderUnits();
     return hackDone();
@@ -469,7 +553,7 @@ function openTerminal(x, y) {
   const f = S.furn.get(key(x, y));
   S.terminal = { x, y };
   const rows = HACKS.map(h => {
-    const done = f.done.has(h.id) || (h.id === 'doors' && !S.keyDoors.size) || (h.id === 'plan' && S.planned);
+    const done = f.done.has(h.id) || (h.id === 'doors' && !S.keyDoors.size) || (h.id === 'plan' && S.planned) || (h.id === 'lasers' && !S.trips.size);
     return `<button class="hack" data-act="hack-${h.id}" ${done ? 'disabled' : ''}>
       <b>${h.name}</b> <span>${done ? 'done' : ''}</span><small>${h.text}</small></button>`;
   }).join('');
@@ -487,6 +571,7 @@ function doHack(id) {
   if (f.firewall) { damage(S.player, 1); log('The firewall bites back. 1 damage.'); if (S.player.hp <= 0) { $('#modal').hidden = true; return gameOver('The firewall fried your nervous system.'); } }
   if (id === 'loop') { S.camLoop = CAMERA_LOOP_ROUNDS; log(`You loop the cameras for ${CAMERA_LOOP_ROUNDS} rounds.`); }
   else if (id === 'doors') { S.keyDoors.clear(); renderKeyDoors(); log('Every keycard door on the floor clunks open.'); }
+  else if (id === 'lasers') { for (const k of S.trips) tileEl(...unkey(k)).classList.remove('trip'); S.trips.clear(); log('Every laser on the floor blinks out.'); }
   else if (id === 'plan') { S.planned = true; log('The printer whirs. The floor plan is now on your map.'); drawMinimap(); }
   else if (id === 'fire') {
     const P = S.player, spots = [];
@@ -1572,6 +1657,7 @@ async function enemyTurn(e) {
   const r = unitEls.get(e.id);
   r.el.classList.add('acting'); r.intent.classList.add('acting');
   if (e.stunned) { e.stunned--; e.aim = null; await pause(300); }
+  else if (e.ally > 0) await allyTurn(e);
   else if (isCamera(e)) await cameraTurn(e);
   else if (e.alerted && e.fleeing) await fleeTurn(e);
   else if (e.alerted) await alertedTurn(e);
@@ -2412,6 +2498,7 @@ function drawMinimap() {
 function render() { renderUnits(); renderOverlays(); renderSide(); renderBar(); renderHand(); updateCamera(); }
 
 function intentHTML(e) {
+  if (e.ally > 0) return `<span class="hackt">Hijacked ${e.ally}</span>`;
   if (e.stunned) return `<span class="stun">${e.stunned > 1 ? `Asleep ${e.stunned} turns` : 'Stunned'}</span>`;
   if (isCamera(e) && (S.camLoop > 0 || e.looped > 0)) return '<span class="stun">Looped</span>';
   if (isCamera(e)) return e.tracking ? '<span class="a">Tracking</span>' : '<span class="idle">Watching</span>';
@@ -2487,6 +2574,7 @@ function renderUnits() {
     r.intent.style.visibility = shown ? '' : 'hidden';
     r.intent.innerHTML = intentHTML(u);
     r.el.classList.toggle('aware', u.alerted);
+    r.el.classList.toggle('ally', u.ally > 0);
     r.el.classList.toggle('haskey', !!u.hasKey && !S.hasKey);
     r.el.style.setProperty('--rot', Math.atan2(u.facing[0], -u.facing[1]) + 'rad');
   }
@@ -2844,6 +2932,7 @@ document.addEventListener('click', e => {
   else if (act === 'wear') { $('#modal').hidden = true; S.disguise = S.disguiseOffer; log(`You put on the ${S.disguise}. From a distance, you're staff.`); render(); }
   else if (act === 'title') showTitle();
   else if (act.startsWith('hack-')) doHack(act.slice(5));
+  else if (act.startsWith('mhack-')) machineHack(act.slice(6));
   else if (act.startsWith('gadget-')) useGadget(act.slice(7));
   else if (act.startsWith('install-')) { $('#modal').hidden = true; installImplant(act.slice(8)); run.notes.splice(0).forEach(log); render(); }
   else if (act === 'ending-echo') showEcho();

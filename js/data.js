@@ -263,11 +263,16 @@ const SAFE_IMPLANT_CHANCE = 0.5;
 // The Hack half works on a networked terminal or a keypad door next to you (Spinal Tap: up to 3 tiles away, in
 // sight), or on a camera you can see within 5 tiles. A terminal offers one of these hacks per Hack card.
 const HACK_REACH = 1, HACK_REACH_TAP = 3;
+// Lasers and machines (drones, avatars) can be hacked from up to HACK_FAR tiles, in sight. A machine can be shut down
+// for SHUTDOWN_TURNS, hijacked to fight for you for HIJACK_TURNS, or overloaded: it blows up, OVERLOAD_DMG to
+// everyone next to it (you too), and sets nearby oil alight.
+const HACK_FAR = 5, SHUTDOWN_TURNS = 3, HIJACK_TURNS = 4, OVERLOAD_DMG = 4;
 const CAMERA_LOOP_ROUNDS = 5;
 const HACKS = [
   { id: 'loop',  name: 'Loop the cameras', text: `Every camera on the floor shows old footage for ${CAMERA_LOOP_ROUNDS} rounds.` },
   { id: 'doors', name: 'Release the lift doors', text: 'Unlocks every keycard door on this floor.' },
   { id: 'plan',  name: 'Print the floor plan', text: 'The whole layout goes on your map.' },
+  { id: 'lasers', name: 'Kill the laser grid', text: 'Switches off every laser tripwire on this floor.' },
   { id: 'fire',  name: 'Pull a fire alarm', text: 'A bell rings far from you. Everyone who hears it goes to look.' },
 ];
 

@@ -529,3 +529,11 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 .tile.target-hack { cursor: crosshair; }
 .tile.target-hack::after { background: rgba(80,140,220,.32); box-shadow: inset 0 0 0 2px #5b8fd6; }
 .big.hack { color: #2f5f9e; }
+
+/* Hacking: a blue flash on whatever you got into. Hijacked machines wear a blue ring. */
+.float.hack { color: #7fb2f0; }
+.intent .hackt { color: #7fb2f0; font-weight: 600; }
+.unit.ally .token { border-color: #5b8fd6; box-shadow: 0 0 0 2px rgba(91,143,214,.45), 0 2px 0 rgba(0,0,0,.6); }
+@keyframes glitch { 0% { filter: none; transform: translate(0, 0); } 20% { filter: hue-rotate(180deg) brightness(1.6); transform: translate(-2px, 1px); }
+  40% { filter: none; transform: translate(2px, -1px); } 60% { filter: hue-rotate(90deg) brightness(1.4) contrast(1.5); transform: translate(-1px, 0); } 100% { filter: none; transform: translate(0, 0); } }
+.glitch { animation: glitch .6s steps(6) 1; }

@@ -51,12 +51,17 @@ function pathTo(prev, sx, sy, tx, ty) {
 
 // Line of sight: sample along the line between tile centers; walls block, units don't.
 // The target tile itself doesn't count, so you can shoot at a door.
+// Low furniture you can see (and shoot) over. Cabinets, vending machines, safes, vats and crates still block.
+const LOW_FURNITURE = new Set(['desk', 'terminal', 'altar', 'contact', 'phone']);
+const LOW_PROPS = new Set(['droids', 'flesh']);
+const blocksSight = (x, y) => isWall(x, y) && !(S.furn.has(key(x, y)) && LOW_FURNITURE.has(S.furn.get(key(x, y)).kind)) && !(S.props.has(key(x, y)) && LOW_PROPS.has(FLOORS[S.room].theme));
+
 function los(a, b) {
   const x0 = a.x + .5, y0 = a.y + .5, x1 = b.x + .5, y1 = b.y + .5;
   const n = Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 6);
   for (let i = 1; i < n; i++) {
     const t = i / n, x = Math.floor(x0 + (x1 - x0) * t), y = Math.floor(y0 + (y1 - y0) * t);
-    if ((x !== b.x || y !== b.y) && isWall(x, y)) return false;
+    if ((x !== b.x || y !== b.y) && blocksSight(x, y)) return false;
   }
   return true;
 }
@@ -67,8 +72,8 @@ function fireLine(a, b, range) {
   for (let i = 1; i <= steps; i++) {
     const t = i / 4, x = Math.floor(a.x + .5 + dx / len * t), y = Math.floor(a.y + .5 + dy / len * t);
     if (x === a.x && y === a.y) continue;
-    if (isWall(x, y)) break;
-    if (!out.some(p => p.x === x && p.y === y)) out.push({ x, y });
+    if (blocksSight(x, y)) break;
+    if (!isWall(x, y) && !out.some(p => p.x === x && p.y === y)) out.push({ x, y });
   }
   return out;
 }
@@ -407,7 +412,7 @@ function searchFurniture(x, y) {
 
 // ---------- Terminals ----------
 // Hacking is free (no card, no move) but costs Energy. Each hack works once per terminal.
-// Firewalled terminals (floor 5, or after the Head noticed your hacking) also bite: 1 HP per hack.
+// Firewalled terminals (after the Head noticed your hacking) also bite: 1 HP per hack.
 const hackCost = h => S.freeHack ? 0 : Math.max(0, h.cost - (hasGear('jammer') ? 1 : 0));
 
 function openTerminal(x, y) {
@@ -768,7 +773,7 @@ function loadRoom(idx) {
       else if (c === 'C') S.codeDoors.set(key(x, y), doorCode);  // the keypad room's doors share one code
       else if (c === 'S') S.furn.set(key(x, y), { kind: 'safe', code: randomCode(), opened: false });
       else if (c === 'V') S.furn.set(key(x, y), { kind: 'vending' });
-      else if (c === 'T') S.furn.set(key(x, y), { kind: 'terminal', done: new Set(), firewall: run.adapt === 'hacker' || idx === FLOORS.length - 1 });
+      else if (c === 'T') S.furn.set(key(x, y), { kind: 'terminal', done: new Set(), firewall: run.adapt === 'hacker' });
       else if (c === 'G') S.grates.add(key(x, y));
       else if (c === 'b') S.backrooms.add(key(x, y));
       else if (c === 'r') S.circles.add(key(x, y));
@@ -869,7 +874,6 @@ function pickCard(card) {
   if (S.busy) return;
   if (S.phase === 'burn') { S.sel = S.sel === card ? null : card; renderHand(); renderBar(); return; }
   if (S.phase !== 'turn' || card.used || S.act.atkUsed) return;
-  if (S.inDuct && card.action.type !== 'self') { toast('There\'s no room to fight in a duct.'); return; }
   S.hoverDir = null; S.preview = null;
   if (S.playing === card) { S.playing = null; S.act.atk = null; return render(); }
   S.playing = card; S.act.atk = card.action;
@@ -957,6 +961,7 @@ const breakableWall = (x, y) => x > 0 && y > 0 && x < S.w - 1 && y < S.h - 1 && 
 
 // The tiles a click on (x, y) would hit with the picked card, or null if that click isn't a use of it.
 function attackHit(s, x, y) {
+  if (S.inDuct) return null;  // nothing to hit from inside a duct
   const P = S.player, inTiles = tiles => tiles.some(t => t.x === x && t.y === y);
   if (isDirectional(s)) {
     const d = dirTo(x, y), tiles = d && atkTiles(s, P, d);
@@ -1843,7 +1848,7 @@ function showModal(title, msg, buttons, extra = '') {
 function roomCleared() {
   S.phase = 'over'; render();
   run.floorStats[S.room] = { ...S.stats };
-  if (S.room === FLOORS.length - 1) return showEnding(0);
+  if (S.room === FLOORS.length - 1) return showFinalLift();
   showLift();
 }
 
@@ -1985,6 +1990,7 @@ function revealFar() {
 
 function takeStairs() {
   $('#modal').hidden = true;
+  if (S.room >= FLOORS.length - 1) return;
   S.phase = 'over';
   run.floorStats[S.room] = { ...S.stats };
   run.adapt = null;
@@ -2016,7 +2022,7 @@ function gameOver(msg) {
   const st = S.stats;
   showModal('Flatlined', msg, [['restart', 'Retry floor'], ['newrun', 'Start over']], `<p class="epitaph">${line}</p>
     <p class="ai-stats">Floor ${S.room + 1}, ${FLOORS[S.room].name}, round ${S.round}. Kills ${st.kills} · takedowns ${st.takedowns} · spotted ${st.alerts} · cameras ${st.cameras} · hacks ${st.hacks}.
-    Documents that matter: ${run.story.filter(Boolean).length} of ${STORY_DOCS.length}.</p>`);
+    Documents that matter: ${run.story.filter(Boolean).length} of ${FLOORS.length}.</p>`);
 }
 
 // ---------- The ending and Echoes ----------
@@ -2026,6 +2032,16 @@ function loadEchoes() { try { return JSON.parse(localStorage.getItem(ECHO_KEY)) 
 function saveEchoes(list) { try { localStorage.setItem(ECHO_KEY, JSON.stringify(list)); } catch {} }
 let echoes = loadEchoes();
 const hasEcho = id => echoes.includes(id);
+
+// The last ride up: the lift scene, then the Head's message to you (the last document that matters), then the ending.
+function showFinalLift() {
+  sfx('lift');
+  const m = STORY_DOCS[STORY_DOCS.length - 1];
+  showModal('The spine', '', [['ending-0', 'Touch the Head']], `<div class="lift">
+    <p class="lift-story">${ELEVATOR_STORIES[S.room] || ''}</p>
+    <div class="doc mail story"><div class="doc-head">From: ${m.from}<br>Subject: ${m.subject}</div><p>${m.body}</p></div></div>`);
+  $('#modal .box').classList.add('wide');
+}
 
 function showEnding(i) {
   const last = i === ENDING_PARAGRAPHS.length - 1;
@@ -2041,7 +2057,7 @@ function showEcho() {
   showModal('You come back weird', id ? 'Something came back with you.' : 'Nothing new came back with you. You are already as weird as it gets.',
     [['newrun', 'Climb again']],
     (id ? `<div class="doc paper"><div class="doc-head">Echo: ${ECHO_FLAVOUR[id].name}</div><p>${ECHO_FLAVOUR[id].text}</p></div>` : '') +
-    `<p class="ai-stats">You found ${found} of ${STORY_DOCS.length} documents that matter.</p>`);
+    `<p class="ai-stats">You found ${found} of ${FLOORS.length} documents that matter.</p>`);
 }
 
 // ---------- How to play ----------
@@ -2283,8 +2299,8 @@ function renderOverlays() {
   else if (S.phase === 'turn' && !S.busy) {
     const a = S.act;
     if (!a.mvUsed) mark(reachTiles(a.move), 'reach');
-    if (a.atk && !a.atkUsed) markAtk(a.atk, isDirectional(a.atk) ? S.hoverDir : null);
-    else if (S.preview && !a.atkUsed) markAtk(S.preview, null);
+    if (a.atk && !a.atkUsed && !S.inDuct) markAtk(a.atk, isDirectional(a.atk) ? S.hoverDir : null);
+    else if (S.preview && !a.atkUsed && !S.inDuct) markAtk(S.preview, null);
   }
   // Yellow: what unaware enemies you can see are watching now. Violet: what they'll see on their next patrol.
   computeFov();
@@ -2381,7 +2397,7 @@ function renderBar() {
     else if (!a.atkUsed) hint = (isDirectional(a.atk) ? 'Point toward a target and click a red tile' : 'Click a red target')
       + ` to use <b>${c.name}</b>. Click the card again to put it back.`;
     else hint = a.mvUsed ? 'Done for this turn. Use a stim or serum if you like, then end your turn.' : (a.steps ? `You have ${fmtMove(a.move)} step${a.move > 1 ? 's' : ''} left. Click a blue tile, or end your turn.` : 'Click a blue tile to move, or end your turn.');
-    if (S.inDuct) hint = `<b>In the air ducts.</b> Nobody can see you. ${S.grates.has(key(S.player.x, S.player.y)) ? 'Click the floor next to this grate to climb out, or crawl on.' : 'Crawl along the duct (blue). Climb out at a grate.'}`;
+    if (S.inDuct) hint = `<b>In the air ducts.</b> Nobody can see you${c && c.action.type !== 'self' && !a.atkUsed ? `, and there's nothing to hit with ${c.name} from here` : ''}. ${S.grates.has(key(S.player.x, S.player.y)) ? 'Click the floor next to this grate to climb out, or crawl on.' : 'Crawl along the duct (blue). Climb out at a grate.'}`;
     const bonus = '';
     bar.innerHTML = `
       <div class="hint">${hint}</div>

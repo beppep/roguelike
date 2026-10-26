@@ -178,11 +178,11 @@ function generateFloor(f) {
   const safeRooms = [...rooms].sort(() => rng() - 0.5).slice(0, ri(1, 2));
   const vendRooms = rooms.filter(r => !safeRooms.includes(r)).sort(() => rng() - 0.5).slice(0, 2);
   const termRooms = rooms.filter(r => !safeRooms.includes(r) && !vendRooms.includes(r)).sort(() => rng() - 0.5).slice(0, ri(1, 2));
-  // Far rooms (by walking distance) for the fire stairs ('Z', floors 1-4), a Bazaar contact ('Q', floors 1-4)
+  // Far rooms (by walking distance) for the fire stairs ('Z', all but the last floor), a Bazaar contact ('Q', floors 1-4)
   // and the dream phone ('H', floors 2-5).
   const farRooms = rooms.filter(r => r !== exitRoom && dist[r.cy][r.cx] > 14 && !safeRooms.includes(r) && !vendRooms.includes(r) && !termRooms.includes(r)).sort(() => rng() - 0.5);
   const special = new Map();
-  if (f.index < 4 && farRooms[0]) special.set(farRooms[0], 'Z');
+  if (f.index < FLOORS.length - 1 && farRooms[0]) special.set(farRooms[0], 'Z');
   if (f.index < 4 && farRooms[1]) special.set(farRooms[1], 'Q');
   if (f.index > 0 && farRooms[2]) special.set(farRooms[2], 'H');
 

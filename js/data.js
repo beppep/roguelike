@@ -136,7 +136,8 @@ const ENEMY_TYPES = {
   c: { name: 'Camera', glyph: '◉', hp: 2, color: '#8a8172', vision: 6, patrol: 0, camera: true, machine: true, intents: [] },
 };
 
-// The corporate tower: five generated floors. Each floor is one rectangular office building: a grid of
+// The corporate tower: four generated floors. The lift from the last one goes to the Head (the ending; a boss floor
+// may come later). Each floor is one rectangular office building: a grid of
 // two-wide corridors, with the blocks between them cut into rooms by walls one tile thick. Each run adds its own number to
 // the seed, so a floor keeps its layout for the whole run (restarts included) but changes between runs. vCorridors = north-south corridors crossing the east-west
 // one, extraDoors = chance each extra wall between two spaces also gets a door (more routes around),
@@ -154,8 +155,6 @@ const FLOORS = [
     extraDoors: 0.3, enemyChance: 0.35, lootChance: 0.45, guards: 2, cameras: 4, civilians: 2, mix: 'gdddeen', backrooms: 1, loot: { card: 0.2, creds: 0.45, potion: 0.35 } },
   { name: 'Meatology',       theme: 'flesh',   cache: 'a reliquary',        seed: 4404, w: 50, h: 34, vCorridors: 3,
     extraDoors: 0.35, enemyChance: 0.4, lootChance: 0.45, guards: 2, cameras: 2, mix: 'kkkmgy', backrooms: 2, altars: 2, loot: { card: 0.25, creds: 0.3, potion: 0.45 } },
-  { name: 'The Head',        theme: 'head',    cache: 'a memory core',      seed: 5505, w: 40, h: 28, vCorridors: 2,
-    extraDoors: 0.4, enemyChance: 0.45, lootChance: 0.4, guards: 2, cameras: 3, mix: 'aakmyn', backrooms: 1, altars: 1, loot: { card: 0.3, creds: 0.2, potion: 0.5 } },
 ];
 FLOORS.forEach((fl, i) => { fl.index = i; });
 

@@ -335,7 +335,7 @@ function dirTo(x, y) {
 
 const atkName = s => s.gun ? (s.dmg ? `Shoot ${s.dmg}` : `Sleep ${s.stun}`) : [s.dmg ? `Attack ${s.dmg + (s.str && S ? strBonus() : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
   .filter(Boolean).join(' + ');
-const atkLabel = s => `${atkName(s)}${s.miss ? ` (${Math.round(100 - s.miss * 100)}% to hit)` : ''} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Terminal, keypad or camera' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
+const atkLabel = s => `${atkName(s)}${s.miss ? ` (${Math.round(100 - s.miss * 100)}% to hit)` : ''} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Next to you' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
 
 // ---------- State ----------
 let S = null;
@@ -421,19 +421,20 @@ function searchFurniture(x, y) {
 }
 
 // ---------- Hacking ----------
-// The Hack half: a terminal or keypad door within reach (next to you; Spinal Tap: 3 tiles, in sight), or a camera
-// in sight within 5. Each hack works once per terminal. Firewalled terminals (after the Head noticed your hacking)
+// The Hack half: a terminal, keypad door, camera, laser or unaware machine right next to you.
+// Each hack works once per terminal. Firewalled terminals (after the Head noticed your hacking)
 // also bite: 1 HP per hack. Every hack may be traced (alarm +1) unless you carry a Signal Jammer.
-const hackReach = () => hasImplant('spinaltap') ? HACK_REACH_TAP : HACK_REACH;
+const hijackTurns = () => HIJACK_TURNS * (hasImplant('spinaltap') ? 2 : 1);
 function hackTargetAt(x, y) {
-  const P = S.player, d = manh(P, { x, y }), near = d <= hackReach() && (d === 1 || los(P, { x, y }));
+  const P = S.player, near = manh(P, { x, y }) === 1;
   const f = S.furn.get(key(x, y));
   if (f && f.kind === 'terminal' && near) return 'terminal';
   if (S.codeDoors.has(key(x, y)) && near) return 'keypad';
   const e = enemyAt(x, y);
-  if (e && isCamera(e) && d <= HACK_FAR && los(P, e) && !(e.looped > 0)) return 'camera';
-  if (e && ENEMY_TYPES[e.kind].machine && !isCamera(e) && d <= HACK_FAR && los(P, e) && !(e.ally > 0)) return 'machine';
-  if (S.trips.has(key(x, y)) && d <= HACK_FAR && los(P, { x, y })) return 'laser';
+  if (e && isCamera(e) && near && !(e.looped > 0)) return 'camera';
+  // Like a pocket: only a machine that hasn't spotted you.
+  if (e && ENEMY_TYPES[e.kind].machine && !isCamera(e) && near && !e.alerted && !(e.ally > 0)) return 'machine';
+  if (S.trips.has(key(x, y)) && near) return 'laser';
   return null;
 }
 
@@ -459,9 +460,9 @@ function machineHack(how) {
     floatText(m, 'OFFLINE', 'hack');
     log(`You shut the ${nameOf(m)} down.`);
   } else if (how === 'hijack') {
-    m.ally = HIJACK_TURNS; m.alerted = false; m.suspicious = null; m.intent = null; m.aim = null; m.fleeing = false;
+    m.ally = hijackTurns(); m.alerted = false; m.suspicious = null; m.intent = null; m.aim = null; m.fleeing = false;
     floatText(m, 'HIJACKED', 'hack');
-    log(`The ${nameOf(m)} is yours for ${HIJACK_TURNS} turns.`);
+    log(`The ${nameOf(m)} is yours for ${hijackTurns()} turns.`);
   } else {
     floatText(m, 'OVERLOAD', 'dmg');
     log(`The ${nameOf(m)} whines, then bursts.`);
@@ -533,7 +534,7 @@ function hackAt(t) {
     return showModal(`Hacking the ${n}`, 'You are in its head. What should it do?', [['closeread', 'Disconnect']],
       `<div class="terminal-menu">
         <button class="hack" data-act="mhack-shut"><b>Shut down</b><small>It goes offline for ${SHUTDOWN_TURNS} turns: no moving, no seeing.</small></button>
-        <button class="hack" data-act="mhack-hijack"><b>Hijack</b><small>For ${HIJACK_TURNS} turns it fights for you: it goes after the nearest of its friends.</small></button>
+        <button class="hack" data-act="mhack-hijack"><b>Hijack</b><small>For ${hijackTurns()} turns it fights for you: it goes after the nearest of its friends.</small></button>
         <button class="hack" data-act="mhack-boom"><b>Overload</b><small>It explodes: ${OVERLOAD_DMG} damage to everyone next to it (you too) and fire on any oil. Loud.</small></button>
       </div>${hasGear('jammer') ? '' : `<p class="small">${Math.round(TRACE_CHANCE * 100)}% chance to be traced (alarm +1).</p>`}`);
   }
@@ -2781,7 +2782,7 @@ function actionHTML(s) {
       (s.move ? `<div class="big dash">Move +${cardMove(s)}</div>` : '') +
       (s.ghost ? '<div class="big dash">Vanish</div><div class="sub">Cameras and the unaware can\'t see you this round</div>' : '<div class="sub">Self</div>');
   }
-  const sub = s.type === 'hack' ? 'Terminal or keypad next to you, or a camera in sight' : s.bribe ? 'Someone unaware next to you' : s.ignite ? 'Fire. Oil and chemicals spread it' : s.type === 'point' ? (s.price ? 'Lands where you can see; people go to look' : 'A sound anywhere you can see') : s.push ? 'Into walls: 2 damage' : s.breach ? 'Blow a hole in a wall. Very loud'
+  const sub = s.type === 'hack' ? 'Something next to you: terminal, keypad, camera, laser, unaware drone' : s.bribe ? 'Someone unaware next to you' : s.ignite ? 'Fire. Oil and chemicals spread it' : s.type === 'point' ? (s.price ? 'Lands where you can see; people go to look' : 'A sound anywhere you can see') : s.push ? 'Into walls: 2 damage' : s.breach ? 'Blow a hole in a wall. Very loud'
     : s.cost ? `Costs ${s.cost} HP` : s.pick ? 'Opens a door, quietly'
     : s.steal ? 'Rob someone unaware' : s.type === 'melee' ? 'Melee' : s.type === 'ranged' ? 'Ranged · clear shot' : SHAPE_NAMES[s.shape];
   // Tools are blue (hack, lockpick, steal, bribe, coin toss, breach); attacks and stuns are red.

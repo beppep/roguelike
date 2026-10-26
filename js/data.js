@@ -26,7 +26,7 @@ const HALVES = {
   strike:     { name: 'Melee Attack',    action: { type: 'melee', dmg: OPERATIVE.strength, str: true } },
   sprint:     { name: 'Sprint',          action: { type: 'self', move: 'base' } },
   lockpick:   { name: 'Lockpick',        action: { type: 'melee', dmg: 0, pick: true } },
-  hack:       { name: 'Hack',            action: { type: 'hack', range: 5 } },
+  hack:       { name: 'Hack',            action: { type: 'hack', range: 1 } },
   // Shoot: fires whatever gun you carry (see GUNS). A better gun makes every Shoot half better.
   shoot:      { name: 'Shoot',           action: { type: 'gun' } },
   // Shove: push someone next to you 2 tiles and stun them for a turn; slamming into something does 2 damage.
@@ -243,7 +243,7 @@ const IMPLANTS = {
   plating:   { part: 'skin',  name: 'Subdermal Plating',    text: 'The first hit you take each round deals 1 less.' },
   echo:      { part: 'ears',  name: 'Echolocator',          text: 'You see people through walls within 5 tiles.' },
   autophage: { part: 'gut',   name: 'Autophage Gland',      text: 'Searching a body also feeds you from it: heal 3.' },
-  spinaltap: { part: 'spine', name: 'Spinal Tap',           text: 'Hack terminals and keypad doors from up to 3 tiles away.' },
+  spinaltap: { part: 'spine', name: 'Spinal Tap',           text: 'Machines you hijack stay yours twice as long.' },
   compressed:{ part: 'skull', name: 'Compressed Head',      text: 'In the air ducts every step goes twice as far.' },
   heart:     { part: 'heart', name: 'Second Heart',         text: `+${SECOND_HEART_HP} max HP.` },
   myomer:    { part: 'arms',  name: 'Myomer Fibres',        text: '+1 Strength: Melee Attack hits 1 harder.' },
@@ -260,13 +260,12 @@ const DEFECTS = {
 const SAFE_IMPLANT_CHANCE = 0.5;
 
 // ---------- Hacking ----------
-// The Hack half works on a networked terminal or a keypad door next to you (Spinal Tap: up to 3 tiles away, in
-// sight), or on a camera you can see within 5 tiles. A terminal offers one of these hacks per Hack card.
-const HACK_REACH = 1, HACK_REACH_TAP = 3;
-// Lasers and machines (drones, avatars) can be hacked from up to HACK_FAR tiles, in sight. A machine can be shut down
+// Hacking is as close-up as picking a pocket: the Hack half works only on something right next to you. A terminal,
+// a keypad door, a camera, a laser beam, or a machine (drone) that hasn't spotted you. A terminal offers one of
+// these hacks per Hack card. A machine can be shut down
 // for SHUTDOWN_TURNS, hijacked to fight for you for HIJACK_TURNS, or overloaded: it blows up, OVERLOAD_DMG to
 // everyone next to it (you too), and sets nearby oil alight.
-const HACK_FAR = 5, SHUTDOWN_TURNS = 3, HIJACK_TURNS = 4, OVERLOAD_DMG = 4;
+const SHUTDOWN_TURNS = 3, HIJACK_TURNS = 4, OVERLOAD_DMG = 4;
 const CAMERA_LOOP_ROUNDS = 5;
 const HACKS = [
   { id: 'loop',  name: 'Loop the cameras', text: `Every camera on the floor shows old footage for ${CAMERA_LOOP_ROUNDS} rounds.` },

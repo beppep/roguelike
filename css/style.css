@@ -363,7 +363,8 @@ button.ready { animation: end-pulse 1.3s ease-in-out infinite; }
 .unit.civilian .token { transform: scale(.82); filter: saturate(.6); }
 
 /* Backrooms: damp yellow carpet under a buzzing light. */
-.tile.floor.backroom { background: repeating-linear-gradient(45deg, #4a4328 0 3px, #463f25 3px 6px) !important; box-shadow: inset 0 0 0 1px #3a3420 !important; }
+/* Oil storage: a steel grating floor (the oil itself is drawn as puddles on top). */
+.tile.floor.oilroom { background: repeating-linear-gradient(90deg, #2b2d2f 0 2px, #1c1d1f 2px 7px), #1c1d1f !important; box-shadow: inset 0 0 0 1px #141516 !important; }
 /* A sniper's line of fire. */
 .tile.aim::after { content: ''; position: absolute; inset: 0; background: repeating-linear-gradient(-45deg, rgba(181,80,58,.45) 0 4px, transparent 4px 9px); box-shadow: inset 0 0 0 1px rgba(181,80,58,.7); pointer-events: none; }
 .howto p { text-align: left; line-height: 1.55; }
@@ -519,3 +520,4 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 .deck-grid .card .sub, .deck-grid .card .diag { display: none; }
 .deck-grid .card .big { font-size: 13px; }
 @media (max-width: 860px) { .sheet { grid-template-columns: 1fr; } }
+.puddle.full::before { inset: 0; border-radius: 0; opacity: .9; }

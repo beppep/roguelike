@@ -818,7 +818,7 @@ function loadRoom(idx) {
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
     doors: new Map(), keyDoors: new Set(), codeDoors: new Map(), codes: [], planned: false, keypad: null, props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
-    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(rows.liquids || []), fire: new Map(), camLoop: 0, shp: new Map(), openDoors: new Set(),
+    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, oilrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(rows.liquids || []), fire: new Map(), camLoop: 0, shp: new Map(), openDoors: new Set(),
     alarm: 0, reinforceIn: 0, adapt: run.adapt, noiseBonus: run.adapt === 'loud' ? 1 : 0, familiar: hasEcho('staff'), stats: { kills: 0, takedowns: 0, alerts: 0, cameras: 0, alarm: 0, pickpockets: 0, smashed: 0, hacks: 0, loot: 0 },
   };
   let n = 0;
@@ -835,7 +835,7 @@ function loadRoom(idx) {
       else if (c === 'V') S.furn.set(key(x, y), { kind: 'vending' });
       else if (c === 'T') S.furn.set(key(x, y), { kind: 'terminal', done: new Set(), firewall: run.adapt === 'hacker' });
       else if (c === 'G') S.grates.add(key(x, y));
-      else if (c === 'b') S.backrooms.add(key(x, y));
+      else if (c === 'b') { S.oilrooms.add(key(x, y)); S.liquids.set(key(x, y), 'oil'); }
       else if (c === 'r') S.circles.add(key(x, y));
       else if (c === 'A') S.furn.set(key(x, y), { kind: 'altar', used: false });
       else if (c === 'Z') S.furn.set(key(x, y), { kind: 'stairs' });
@@ -1151,8 +1151,6 @@ async function useAttack(hit) {
     }
     if ((s.dmg > 0 && targets.length) || (s.push && targets.length) || ((s.type === 'ranged' || s.gun) && s.dmg > 0 && !s.silent)) { S.violentRound = S.round; checkSight(); }
     if ((s.type === 'ranged' || s.gun) && s.dmg > 0 && !s.silent) for (const t of hit) if (FLAMMABLE.has(S.liquids.get(key(t.x, t.y)))) ignite(t.x, t.y);
-    if (s.stun) for (const e of targets) if (S.liquids.get(key(e.x, e.y)) === 'blood')
-      for (const o of S.enemies) if (o !== e && !o.stunned && manh(o, e) <= 2 && S.liquids.get(key(o.x, o.y)) === 'blood') { o.stunned = s.stun; floatText(o, 'ARC', 'stun'); log(`The charge arcs through the blood into ${nameOf(o)}.`); }
     // Noise: silenced shots, stuns and picks are quiet; a kill on someone who never saw you is a takedown.
     const dealt = s.dmg > 0 && (targets.length || doors.length || vats.length || structs.length);
     const takedown = targets.length && targets.every(e => e.hp <= 0 && e.wasUnaware);
@@ -1832,11 +1830,6 @@ function reduceHit(dmg, it) {
   return Math.max(0, dmg);
 }
 
-const BACKROOM_LINES = [
-  'The carpet here is yellow and damp. The fluorescent hum is a little too loud. You do not remember the door.',
-  'An empty room that goes on slightly longer than the walls allow. It smells of old carpet and someone else\'s déjà vu.',
-  'Yellow walls, yellow carpet, a buzzing light. You have been here before. You are fairly sure you have never been here.',
-];
 
 // ---------- Liquids and fire ----------
 // Setting a tile alight also flashes through every puddle of oil or chemicals connected to it.
@@ -1892,7 +1885,7 @@ function renderLiquids() {
   for (const [k, kind] of S.liquids) {
     if (!S.seen.has(k)) continue;  // only puddles you have seen
     const [x, y] = unkey(k), el = document.createElement('div');
-    el.className = 'puddle ' + kind;
+    el.className = 'puddle ' + kind + (S.oilrooms.has(k) ? ' full' : '');  // a flooded room is one sheet of oil
     el.style.left = x * T + 'px'; el.style.top = y * T + 'px';
     fx.prepend(el);
   }
@@ -1930,7 +1923,6 @@ async function walk(u, path) {
         makeNoise(x, y, NOISE.gun, { x, y }, true);
         raiseAlarm(1);
       }
-      if (S.backrooms.has(key(x, y)) && !S.backroomSeen) { S.backroomSeen = true; log(BACKROOM_LINES[S.room % BACKROOM_LINES.length]); }
       checkSight();
       if (S.loot.has(key(x, y))) openCache(x, y);
       if (S.drops.has(key(x, y))) takeDrop(x, y);
@@ -2282,7 +2274,7 @@ function buildBoard() {
     t.className = 'tile ' + c;
     if (x === S.exit.x && y === S.exit.y) t.classList.add('exit');
     if (S.grates.has(key(x, y))) t.classList.add('grate');
-    if (S.backrooms.has(key(x, y))) t.classList.add('backroom');
+    if (S.oilrooms.has(key(x, y))) t.classList.add('oilroom');
     if (S.circles.has(key(x, y))) t.classList.add('circle');
     if (S.trips.has(key(x, y))) t.classList.add('trip');
     t.dataset.x = x; t.dataset.y = y;

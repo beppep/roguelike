@@ -182,8 +182,7 @@ const ENEMY_TYPES = {
   c: { name: 'Camera', glyph: '◉', hp: 2, color: '#8a8172', vision: 6, patrol: 0, camera: true, machine: true, intents: [] },
 };
 
-// The corporate tower: three generated floors (the droid floor's drones, snipers, husks and backrooms now live
-// on the Foundry). The lift from the last one goes to the Head (the ending; a boss floor
+// The corporate tower: three generated floors (the droid floor's drones and snipers now live on the Foundry). The lift from the last one goes to the Head (the ending; a boss floor
 // may come later). Each floor is one rectangular office building: a grid of
 // two-wide corridors, with the blocks between them cut into rooms by walls one tile thick. Each run adds its own number to
 // the seed, so a floor keeps its layout for the whole run (restarts included) but changes between runs. vCorridors = north-south corridors crossing the east-west
@@ -197,9 +196,9 @@ const FLOORS = [
   { name: 'Pharma Labs',     theme: 'pharma',  cache: 'a medicine cabinet', seed: 1101, w: 40, h: 28, vCorridors: 2,
     extraDoors: 0.3, enemyChance: 0.55, lootChance: 0.6, guards: 2, cameras: 1, civilians: 5, mix: 'ggd',   puddles: { kind: 'chem', count: 4 }, loot: { card: 0.15, creds: 0.25, potion: 0.6 } },
   { name: 'Weapons Foundry', theme: 'weapons', cache: 'a weapons locker',   seed: 2202, w: 46, h: 30, vCorridors: 2,
-    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, cameras: 4, civilians: 3, mix: 'ggddden', backrooms: 1, husks: 4, puddles: { kind: 'oil', count: 6 }, loot: { card: 0.35, creds: 0.4, potion: 0.25 } },
+    extraDoors: 0.3, enemyChance: 0.45, lootChance: 0.5, guards: 2, cameras: 4, civilians: 3, mix: 'ggddden', oilrooms: 1, puddles: { kind: 'oil', count: 6 }, loot: { card: 0.35, creds: 0.4, potion: 0.25 } },
   { name: 'Meatology',       theme: 'flesh',   cache: 'a reliquary',        seed: 4404, w: 50, h: 34, vCorridors: 3,
-    extraDoors: 0.35, enemyChance: 0.4, lootChance: 0.45, guards: 2, cameras: 2, mix: 'kkkmgy', backrooms: 2, altars: 2, puddles: { kind: 'blood', count: 6 }, loot: { card: 0.25, creds: 0.3, potion: 0.45 } },
+    extraDoors: 0.35, enemyChance: 0.4, lootChance: 0.45, guards: 2, cameras: 2, mix: 'kkkmgy', oilrooms: 1, altars: 2, puddles: { kind: 'blood', count: 6 }, loot: { card: 0.25, creds: 0.3, potion: 0.45 } },
 ];
 FLOORS.forEach((fl, i) => { fl.index = i; });
 
@@ -289,8 +288,7 @@ const NOISE_BREACH = 10;
 // ---------- Liquids and fire ----------
 // Bodies leave blood (machines leave oil); broken vats leave chemicals. Oil and chemicals burn: gunfire, Incinerate
 // and incendiaries set them alight, and fire races along any connected puddle. Fire burns for FIRE_TURNS rounds and
-// hurts whoever stands in it at the end of a round. Blood conducts: a stun on someone standing in blood arcs to
-// everyone else in blood within 2 tiles.
+// hurts whoever stands in it at the end of a round. Blood doesn't burn.
 const FLAMMABLE = new Set(['oil', 'chem']);
 const FIRE_TURNS = 3, FIRE_DMG = 2;
 // Floors also start with a few puddles of their own (FLOORS[].puddles): chemical spills in the labs, oil leaks in

@@ -13,7 +13,7 @@ function mulberry32(a) {
 // Builds a floor as map rows: # wall, . floor, + locked door, O open door, o floor-themed furniture (blocks movement and sight),
 // K desk with a computer and F filing cabinet (solid; search them from next door), $ loot cache,
 // L keycard door, C keypad door, S wall safe, V vending machine, T networked terminal, G vent grate (in a wall),
-// P player, X exit (the lift up), g/d/e/k/m/a enemies (ganger, drone, enforcer, cultist, golem, avatar), v clerk, c camera, n sniper, y daemon, b backroom floor, A altar, r blood circle floor,
+// P player, X exit (the lift up), g/d/e/k/m/a enemies (ganger, drone, enforcer, cultist, golem, avatar), v clerk, c camera, n sniper, y daemon, b oil storage floor, A altar, r blood circle floor,
 // Z fire stairs, Q Bazaar contact, H dream phone, U droid husk, w laser tripwire (floor). The air ducts are returned as rows.ducts.
 function generateFloor(f) {
   const rng = mulberry32(f.seed + (f.runSeed || 0));
@@ -225,12 +225,12 @@ function generateFloor(f) {
     }
     return [x, y];
   };
-  // Backrooms: a few rooms that are just empty yellow carpet. 'b' is floor that belongs to one.
+  // Oil storage rooms: empty rooms with a floor flooded with oil. 'b' is floor that belongs to one.
   // Ritual rooms: an altar ('A') in the middle, ringed by a blood circle ('r', floor).
   const altarRooms = rooms.filter(r => r !== exitRoom && r.w >= 5 && r.h >= 5 && !safeRooms.includes(r) && !vendRooms.includes(r) && !termRooms.includes(r))
     .sort(() => rng() - 0.5).slice(0, f.altars || 0);
   const backRooms = rooms.filter(r => !altarRooms.includes(r) && !special.has(r) && r !== exitRoom && !safeRooms.includes(r) && !vendRooms.includes(r) && !termRooms.includes(r)
-    && Math.abs(r.cx - start.cx) + Math.abs(r.cy - start.cy) > 8).sort(() => rng() - 0.5).slice(0, f.backrooms || 0);
+    && Math.abs(r.cx - start.cx) + Math.abs(r.cy - start.cy) > 8).sort(() => rng() - 0.5).slice(0, f.oilrooms || 0);
   for (const r of rooms) {
     if (altarRooms.includes(r)) {
       const cx = Math.floor(r.x + r.w / 2), cy = Math.floor(r.y + r.h / 2);
@@ -254,8 +254,6 @@ function generateFloor(f) {
       if (!roomConnected(r)) g[p[1]][p[0]] = '.';
     }
     for (let i = 0; i < Math.floor(area / 18); i++) { const p = loneSpot(r); if (p) g[p[1]][p[0]] = 'o'; }
-    // Droid husks: robots that switched themselves off. You can read their last log.
-    if (f.husks && rng() < f.husks / rooms.length * 4) { const p = loneSpot(r); if (p) g[p[1]][p[0]] = 'U'; }
     // A wall safe, opened with a code found elsewhere on the floor.
     for (let i = 0; i < 6 && safeRooms.includes(r); i++) {
       const p = wallSpot(r);

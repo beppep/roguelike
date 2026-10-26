@@ -521,3 +521,6 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 .deck-grid .card .big { font-size: 13px; }
 @media (max-width: 860px) { .sheet { grid-template-columns: 1fr; } }
 .puddle.full::before { inset: 0; border-radius: 0; opacity: .9; }
+/* HP left on something you've started to break. */
+.tile .hp-tag { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 2; font: 600 11px var(--mono); color: #17130a; background: var(--ink); padding: 0 4px; border-radius: 1px; pointer-events: none; }
+.tile.unseen .hp-tag { visibility: hidden; }

@@ -1192,7 +1192,7 @@ function hitStructure(t, s) {
   const dmg = rollDmg(s.dmg), hp = (S.shp.has(k) ? S.shp.get(k) : STRUCTURE_HP[kind]) - dmg;
   floatText(t, '-' + dmg, 'dmg');
   const name = { keydoor: 'keycard door', codedoor: 'keypad door', wall: 'wall', vending: 'vending machine', husk: 'droid husk' }[kind] || kind;
-  if (hp > 0) { S.shp.set(k, hp); log(`You hit the ${name}.`); return false; }
+  if (hp > 0) { S.shp.set(k, hp); log(`You hit the ${name}.`); renderStructHp(); return false; }
   S.shp.delete(k);
   S.stats.smashed++;
   sfx('smash');
@@ -2281,7 +2281,7 @@ function buildBoard() {
     b.appendChild(t);
   }
   b.style.width = S.w * T + 'px';
-  renderExit(); renderDoors(); renderLoot(); renderVats(); renderDrops(); renderKeyDoors(); renderCodeDoors(); renderFurnStory();
+  renderExit(); renderDoors(); renderLoot(); renderVats(); renderDrops(); renderKeyDoors(); renderCodeDoors(); renderFurnStory(); renderStructHp();
   b.appendChild(buildDucts());
   const fx = document.createElement('div');
   fx.id = 'fx';
@@ -2291,6 +2291,20 @@ function buildBoard() {
 
 function renderExit() {
   $('#board .tile.exit').innerHTML = `<span>${S.room === FLOORS.length - 1 ? 'HEAD' : 'LIFT'}</span>`;
+}
+
+const doorMaxHp = () => DOOR_HP_BY_FLOOR[S.room] || DOOR_HP_BY_FLOOR[DOOR_HP_BY_FLOOR.length - 1];
+
+// Damaged walls, furniture and locked doors show how much they have left.
+function renderStructHp() {
+  for (const el of $('#board').querySelectorAll('.tile > .hp-tag.struct')) el.remove();
+  for (const [k, hp] of S.shp) {
+    const t = tileEl(...unkey(k));
+    const tag = document.createElement('span');
+    tag.className = 'hp-tag struct';
+    tag.textContent = hp;
+    t.appendChild(tag);
+  }
 }
 
 function renderDoors() {
@@ -2305,6 +2319,8 @@ function renderDoors() {
   for (const [k, hp] of S.doors) {
     const t = tileEl(...unkey(k));
     t.classList.add('door');
+    // Health shows once you've started on it.
+    if (hp < doorMaxHp()) t.innerHTML = `<span class="hp-tag">${hp}</span>`;
   }
 }
 
@@ -2727,7 +2743,8 @@ function describeTile(x, y) {
   if (f) out.push({ desk: 'Desk', cabinet: 'Cabinet', safe: f.opened ? 'Safe (open)' : 'Safe', vending: 'Vending machine', terminal: 'Terminal',
     husk: 'Droid husk', altar: 'Altar', stairs: 'Fire stairs', contact: 'Contact', phone: 'Phone' }[f.kind]);
   if (S.grates.has(k) && !S.inDuct) out.push('Vent grate');
-  if (doorAt(x, y)) out.push('Locked door');
+  if (doorAt(x, y)) out.push('Locked door' + (S.doors.get(k) < doorMaxHp() ? ` (${S.doors.get(k)} HP)` : ''));
+  if (S.shp.has(k)) out.push(`${S.shp.get(k)} HP left`);
   if (S.openDoors.has(k)) out.push('Open door');
   if (S.keyDoors.has(k)) out.push('Keycard door');
   if (S.codeDoors.has(k)) out.push('Keypad door');

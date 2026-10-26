@@ -24,7 +24,8 @@ const HALVES = {
   sprint:     { name: 'Sprint',          action: { type: 'self', move: 'base' } },
   lockpick:   { name: 'Lockpick',        action: { type: 'melee', dmg: 0, pick: true } },
   hack:       { name: 'Hack',            action: { type: 'hack', range: 5 } },
-  pistol:     { name: 'Silenced Pistol', action: { type: 'ranged', dmg: 5, range: 5, silent: true } },
+  // Shoot: fires whatever gun you carry (see GUNS). A better gun makes every Shoot half better.
+  shoot:      { name: 'Shoot',           action: { type: 'gun' } },
   // Shove: push someone next to you 2 tiles and stun them for a turn; slamming into something does 2 damage.
   shove:      { name: 'Shove',           action: { type: 'melee', dmg: 0, push: 2, stun: 1 } },
   pickpocket: { name: 'Pickpocket',      action: { type: 'melee', dmg: 0, steal: true } },
@@ -34,15 +35,9 @@ const HALVES = {
   coin:       { name: 'Coin Toss',       action: { type: 'point', noise: 6, range: 7, price: 1 } },
   katana:     { name: 'Mono-Katana',     action: { type: 'melee', dmg: 4 } },
   breach:     { name: 'Breach',          action: { type: 'melee', dmg: 0, breach: true } },
-  smartpistol:{ name: 'Smartpistol',     action: { type: 'ranged', dmg: 2, range: 4 } },
   arc:        { name: 'Arc Blade',       action: { type: 'shape', shape: 'arc', dmg: 3 } },
-  rail:       { name: 'Rail Spike',      action: { type: 'shape', shape: 'line', dmg: 3 } },
   emp:        { name: 'EMP Pulse',       action: { type: 'shape', shape: 'ring', dmg: 0, stun: 1 } },
-  rifle:      { name: 'Smart Rifle',     action: { type: 'ranged', dmg: 3, range: 5 } },
   overclock:  { name: 'Overclock',       action: { type: 'self', move: 'base', moveBonus: 2 } },
-  scatter:    { name: 'Scattergun',      action: { type: 'shape', shape: 'cone', dmg: 2 } },
-  // Tranq Dart: puts someone to sleep for 3 turns (they skip their turns and see nothing).
-  taser:      { name: 'Tranq Dart',      action: { type: 'ranged', dmg: 0, stun: 3, range: 4 } },
   nanostim:   { name: 'Nano-Stim',       action: { type: 'self', heal: 4 } },
   ghost:      { name: 'Ghost Protocol',  action: { type: 'self', ghost: true } },
   bloodlet:   { name: 'Bloodlet',        action: { type: 'melee', dmg: 6, cost: 2 } },
@@ -58,24 +53,24 @@ const startingDeck = () => [
   card(1, 'strike', 'sprint'),
   card(2, 'strike', 'lockpick'),
   card(3, 'strike', 'hack'),
-  card(4, 'pistol', 'hack'),
+  card(4, 'shoot', 'hack'),
   card(5, 'shove', 'coin'),
   card(6, 'pickpocket', 'bribe'),
   card(7, 'patch', 'sprint'),
   card(8, 'lockpick', 'sprint'),
 ];
 
-// Found in loot, safes and the lift: one you don't already own.
+// Offered in the lift between floors: one you don't already own.
 const REWARD_CARDS = [
   card(11, 'katana', 'breach'),
-  card(12, 'smartpistol', 'sprint'),
+  card(12, 'shoot', 'sprint'),
   card(13, 'arc', 'shove'),
-  card(14, 'rail', 'lockpick'),
+  card(14, 'katana', 'lockpick'),
   card(15, 'emp', 'hack'),
-  card(16, 'rifle', 'coin'),
+  card(16, 'shoot', 'coin'),
   card(17, 'overclock', 'patch'),
-  card(18, 'scatter', 'breach'),
-  card(19, 'taser', 'hack'),
+  card(18, 'arc', 'breach'),
+  card(19, 'shoot', 'hack'),
   card(20, 'nanostim', 'ghost'),
   card(21, 'bloodlet', 'incinerate'),
   card(22, 'incinerate', 'sprint'),
@@ -109,13 +104,23 @@ const DOOR_HP = 5;
 // walk over it to take it. Floors not listed here have furniture that can't be broken.
 const BREAKABLES = {
   pharma:  { name: 'vat',   hp: 4, drop: 'potion' },
-  weapons: { name: 'crate', hp: 6, drop: 'gunmod' },
+  weapons: { name: 'crate', hp: 6, drop: 'gun' },
   flesh:   { name: 'blood font', hp: 3, drop: 'potion' },
 };
 
-// Gun mods (from crates) add +1 damage each to every gun card (ranged attacks), up to GUN_MOD_MAX.
-const GUN_MOD_MAX = 3;
-const gunBonus = s => s.type === 'ranged' && s.dmg > 0 ? run.gunMods : 0;
+// ---------- Guns ----------
+// You carry one gun; every Shoot half fires it. You start with the Silenced Pistol. Weapons crates (Foundry) and
+// safes hold other guns: taking one swaps it for yours, and your old gun stays on the floor (you can swap back).
+// Guns trade off rather than stack: quiet or loud, damage, range, a cone or a line.
+const GUNS = {
+  silenced: { name: 'Silenced Pistol', text: 'Quiet. 5 damage, range 5.',                                  action: { type: 'ranged', gun: true, dmg: 5, range: 5, silent: true } },
+  revolver: { name: 'Heavy Revolver',  text: 'Loud. 8 damage, range 4.',                                   action: { type: 'ranged', gun: true, dmg: 8, range: 4 } },
+  rifle:    { name: 'Smart Rifle',     text: 'Loud. 6 damage, range 8.',                                   action: { type: 'ranged', gun: true, dmg: 6, range: 8 } },
+  scatter:  { name: 'Scattergun',      text: 'Loud. 4 damage to everyone in a cone in front of you.',     action: { type: 'shape', gun: true, shape: 'cone', dmg: 4 } },
+  rail:     { name: 'Rail Gun',        text: 'Loud. 5 damage to everyone in a line 3 long.',              action: { type: 'shape', gun: true, shape: 'line', dmg: 5 } },
+  tranq:    { name: 'Tranq Pistol',    text: 'Quiet. No damage: puts the target to sleep for 3 turns. Range 5.', action: { type: 'ranged', gun: true, dmg: 0, stun: 3, range: 5, silent: true } },
+};
+const START_GUN = 'silenced';
 
 // Floors (0-based) whose exit is locked until you take the keycard from the enemy carrying it.
 const KEYCARD_FLOORS = new Set([1, 2]);

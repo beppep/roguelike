@@ -472,3 +472,6 @@ body.god [data-act="god"] { background: var(--red); color: #fff; border-color: v
 #center:hover { opacity: 1; }
 #hand { padding-left: 16px; padding-right: 16px; }
 .panel.body .row.stats { font-size: 13px; border-bottom: 1px solid var(--line); padding-bottom: 6px; margin-bottom: 2px; } .panel.body .row.stats span { color: var(--muted); } .panel.body .row.stats b { color: var(--ink); }
+
+/* A gun lying on the floor. */
+.tile.drop-gun span { width: 20px; height: 8px; border-radius: 1px 3px 3px 1px; background: #77756c; box-shadow: inset 0 0 0 2px #2e2d29, -3px 5px 0 -1px #4a4842, 0 1px 0 rgba(0,0,0,.6); }

@@ -324,7 +324,7 @@ function dirTo(x, y) {
   return Math.abs(dx) >= Math.abs(dy) ? [Math.sign(dx), 0] : [0, Math.sign(dy)];
 }
 
-const atkName = s => [s.dmg ? `Attack ${s.dmg + (run ? gunBonus(s) : 0) + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
+const atkName = s => [s.dmg ? `Attack ${s.dmg + (s.str && S ? serumBonus("strength") : 0)}` : '', s.stun ? 'Stun' : '', s.steal ? 'Steal' : '', s.pick ? 'Lockpick' : '', s.move ? `Move +${cardMove(s)}` : '', s.heal ? `Heal ${s.heal}` : '', s.noise ? (s.price ? `Coin ¥${s.price}` : 'Noise') : '', s.ghost ? 'Vanish' : '', s.push ? `Shove ${s.push}` : '', s.breach ? 'Breach' : '', s.ignite ? 'Ignite' : '', s.type === 'hack' ? 'Hack' : '', s.bribe ? `Bribe ¥${BRIBE_PRICE}` : '']
   .filter(Boolean).join(' + ');
 const atkLabel = s => `${atkName(s)} · ${s.type === 'self' ? 'Self' : s.type === 'melee' ? 'Melee' : s.type === 'hack' ? 'Terminal, keypad or camera' : s.type === 'ranged' || s.type === 'point' ? 'Range ' + s.range : SHAPE_NAMES[s.shape]}${s.cost ? ` · costs ${s.cost} HP` : ''}`;
 
@@ -647,7 +647,7 @@ function gacha() {
   run.creds -= GACHA_PRICE;
   const r = Math.random();
   log('You feed the blinking slot. It thinks about it.');
-  giveLoot(r < 0.08 ? 'card' : r < 0.5 ? randomGadget() : r < 0.85 ? randomPotion() : 'creds', S.player, 'from the blinking slot', '');
+  giveLoot(r < 0.5 ? randomGadget() : r < 0.85 ? randomPotion() : 'creds', S.player, 'from the blinking slot', '');
   openShop();
 }
 
@@ -741,9 +741,14 @@ function enterCode() {
     S.furn.get(k).opened = true;
     tileEl(kp.x, kp.y).classList.add('searched');
     log('The safe clicks open.');
-    giveLoot('card', kp, 'from the safe', '');
     const imp = Object.keys(IMPLANTS).filter(id => !hasImplant(id));
-    if (imp.length && Math.random() < SAFE_IMPLANT_CHANCE) {
+    if (!imp.length || Math.random() >= SAFE_IMPLANT_CHANCE) {
+      // A gun in the safe: it goes on the floor where you stand, and you're asked whether to swap.
+      const pk = key(S.player.x, S.player.y), id = randomGun();
+      S.drops.set(pk, 'gun-' + id); renderDrops();
+      log(`There is a <b>${GUNS[id].name}</b> in the safe.`);
+      setTimeout(() => offerGun(id, pk), 0);
+    } else if (imp.length) {
       const id = imp[Math.floor(Math.random() * imp.length)];
       setTimeout(() => showModal('An implant in the safe', `Sealed in a sterile case: <b>${IMPLANTS[id].name}</b>. ${IMPLANTS[id].text} It goes in your ${partName(IMPLANTS[id].part)}.${implantWarn(id)}`,
         [['install-' + id, 'Install it'], ['closeread', 'Leave it']]), 0);
@@ -777,7 +782,7 @@ function floorMap(idx) {
 
 // Start of a run: fresh deck and loot, then floor 1.
 function newRun() {
-  run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: START_CREDS, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gunMods: 0,
+  run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: START_CREDS, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gun: START_GUN,
     seed: Math.floor(Math.random() * 1e6), maps: [], adapt: null, story: [], floorStats: [],
     gear: {}, implants: [], defects: [], notes: [], items: {} };
   godCreds();
@@ -914,13 +919,16 @@ function pickCard(card, half = 0) {
   if (S.phase !== 'turn' || card.used || S.act.atkUsed) return;
   S.hoverDir = null; S.preview = null;
   if (S.playing === card && S.half === half) { S.playing = null; S.act.atk = null; return render(); }
-  S.playing = card; S.half = half; S.act.atk = card.halves[half].action;
+  S.playing = card; S.half = half; S.act.atk = resolveAction(card.halves[half].action);
   if (S.act.atk.type === 'self') return useSelf();
   render();
 }
+// A half's action as played: Shoot halves become your gun's shot.
+const resolveAction = a => a.type === 'gun' ? GUNS[run.gun].action : a;
+const halfName = h => h.action.type === 'gun' ? GUNS[run.gun].name : h.name;
 // The half you're playing this turn ({ name, action }).
 const playedHalf = () => S.playing && S.playing.halves[S.half];
-const cardMaxDmg = c => Math.max(...c.halves.map(h => h.action.dmg || 0));
+const cardMaxDmg = c => Math.max(...c.halves.map(h => resolveAction(h.action).dmg || 0));
 
 // Resting replaces the whole turn, so it's only possible before you've moved or used a card.
 function startRest() {
@@ -1065,7 +1073,7 @@ async function useAttack(hit) {
   if (s.type === 'hack') { S.busy = true; return hackAt(hit[0]); }
   if (s.bribe) return bribe(enemyAt(hit[0].x, hit[0].y));
   {
-    if (s.dmg > 0) s = { ...s, dmg: s.dmg + gunBonus(s) + (s.str ? serumBonus("strength") : 0) };
+    if (s.dmg > 0) s = { ...s, dmg: s.dmg + (s.str ? serumBonus("strength") : 0) };
     const targets = hit.map(t => !s.pick && enemyAt(t.x, t.y)).filter(Boolean);
     const doors = hit.filter(t => canHitDoor(s) && doorAt(t.x, t.y));
     const vats = hit.filter(t => s.dmg > 0 && vatAt(t.x, t.y));
@@ -1098,14 +1106,14 @@ async function useAttack(hit) {
       if (e.hp > 0 && s.str && hasGear('knuckles') && ENEMY_TYPES[e.kind].machine) { e.stunned = 1; floatText(e, 'STUN', 'stun'); }
       if (e.hp > 0) alertEnemy(e);
     }
-    if ((s.dmg > 0 && targets.length) || (s.push && targets.length) || (s.type === 'ranged' && s.dmg > 0 && !s.silent)) { S.violentRound = S.round; checkSight(); }
-    if (s.type === 'ranged' && s.dmg > 0 && !s.silent) for (const t of hit) if (FLAMMABLE.has(S.liquids.get(key(t.x, t.y)))) ignite(t.x, t.y);
+    if ((s.dmg > 0 && targets.length) || (s.push && targets.length) || ((s.type === 'ranged' || s.gun) && s.dmg > 0 && !s.silent)) { S.violentRound = S.round; checkSight(); }
+    if ((s.type === 'ranged' || s.gun) && s.dmg > 0 && !s.silent) for (const t of hit) if (FLAMMABLE.has(S.liquids.get(key(t.x, t.y)))) ignite(t.x, t.y);
     if (s.stun) for (const e of targets) if (S.liquids.get(key(e.x, e.y)) === 'blood')
       for (const o of S.enemies) if (o !== e && !o.stunned && manh(o, e) <= 2 && S.liquids.get(key(o.x, o.y)) === 'blood') { o.stunned = s.stun; floatText(o, 'ARC', 'stun'); log(`The charge arcs through the blood into ${nameOf(o)}.`); }
     // Noise: silenced shots, stuns and picks are quiet; a kill on someone who never saw you is a takedown.
     const dealt = s.dmg > 0 && (targets.length || doors.length || vats.length);
     const takedown = targets.length && targets.every(e => e.hp <= 0 && e.wasUnaware);
-    const loud = s.silent ? 0 : s.type === 'ranged' && s.dmg > 0 ? NOISE.gun : !dealt ? 0
+    const loud = s.silent ? 0 : (s.type === 'ranged' || s.gun) && s.dmg > 0 ? NOISE.gun : !dealt ? 0
       : doors.length || vats.length ? NOISE.smash : s.type === 'shape' ? NOISE.shape : takedown ? NOISE.takedown : NOISE.melee;
     if (takedown) S.stats.takedowns += targets.length;
     if (loud) makeNoise(P.x, P.y, loud, P);
@@ -1214,10 +1222,11 @@ function givePotion(kind, at, from) {
   renderSide();
 }
 
-// Rolls odds {card, creds, potion}: returns 'card', 'creds', one of POTIONS, or null (nothing).
+// Rolls odds {card, creds, potion}: returns 'creds', one of POTIONS or gadgets, or null (nothing). (The card share
+// pays out as creds: cards come only from the lift.)
 function rollLoot(odds) {
   let roll = Math.random();
-  if (roll < odds.card) return 'card';
+  if (roll < odds.card) return 'creds';  // cards only come from the lift
   roll -= odds.card;
   if (roll < odds.creds) return 'creds';
   roll -= odds.creds;
@@ -1225,20 +1234,10 @@ function rollLoot(odds) {
 }
 
 // Gives one loot result. `at` is where the pop-up text appears; `from` finishes the log line
-// ("from Ganger", "from a medicine cabinet"). A card when you already own every card becomes creds.
+// ("from Ganger", "from a medicine cabinet").
 function giveLoot(what, at, from, emptyMsg) {
   if (what) { S.stats.loot++; sfx('pickup'); }
-  const owned = new Set(deck.map(c => c.id));
-  const pool = REWARD_CARDS.filter(c => !owned.has(c.id));
-  if (what === 'card' && pool.length) {
-    const card = pool[Math.floor(Math.random() * pool.length)];
-    deck = [...deck, card];
-    S.cards.push({ ...card, used: false });
-    floatText(at, '+CARD', 'stun');
-    log(`You take <b>${card.name}</b> ${from}.`);
-    toast(`New card: <b>${card.name}</b> — it's yours for the run.`);
-    renderHand();
-  } else if (what === 'card' || what === 'creds') {
+  if (what === 'card' || what === 'creds') {
     const n = 5 + Math.floor(Math.random() * 11);
     run.creds += n;
     floatText(at, `+¥${n}`, 'stun');
@@ -1312,7 +1311,7 @@ function hitVat(t, s) {
     const el = tileEl(t.x, t.y);
     el.classList.remove('prop', 'vat');
     el.innerHTML = '';
-    S.drops.set(k, b.drop === 'potion' ? randomPotion() : b.drop);
+    S.drops.set(k, b.drop === 'potion' ? randomPotion() : b.drop === 'gun' ? 'gun-' + randomGun() : b.drop);
     if (S.room === 0) { S.liquids.set(k, 'chem'); DIRS.forEach(([dx, dy]) => { if (!isWall(t.x + dx, t.y + dy) && Math.random() < 0.5) S.liquids.set(key(t.x + dx, t.y + dy), 'chem'); }); renderLiquids(); }
     log(`The ${b.name} breaks open. Something ${b.drop === 'potion' ? 'glints' : 'clatters'} on the floor: walk over it to take it.`);
     renderDrops();
@@ -1323,20 +1322,36 @@ function hitVat(t, s) {
 // Walking onto a dropped pickup takes it.
 function takeDrop(x, y) {
   const k = key(x, y), what = S.drops.get(k);
+  if (what.startsWith('gun-')) return offerGun(what.slice(4), k);
   S.drops.delete(k);
   renderDrops();
-  if (POTIONS.includes(what)) {
-    givePotion(what, { x, y }, 'off the floor');
-  } else if (run.gunMods >= GUN_MOD_MAX) {
-    log(`A gun mod, but your guns already carry the maximum of ${GUN_MOD_MAX}.`);
-  } else {
-    run.gunMods++;
-    floatText({ x, y }, '+1 GUN', 'stun');
-    const guns = S.cards.filter(c => c.halves.some(h => gunBonus(h.action))).map(c => c.name);
-    log(`You fit a <b>gun mod</b>: guns deal +${run.gunMods} damage.` + (guns.length ? '' : ' You have no gun card right now, so it does nothing.'));
-    renderHand();
-  }
+  if (POTIONS.includes(what)) givePotion(what, { x, y }, 'off the floor');
   renderSide();
+}
+
+// A gun you haven't got (crates and safes), or any gun but yours.
+const randomGun = () => { const ids = Object.keys(GUNS).filter(id => id !== run.gun && id !== START_GUN); return ids[Math.floor(Math.random() * ids.length)]; };
+
+// Standing on a gun: swap it for yours, or leave it. The gun you put down stays on that tile.
+function offerGun(id, k) {
+  S.gunOffer = { id, k };
+  const g = GUNS[id], mine = GUNS[run.gun];
+  showModal(g.name, `${g.text}<br><br>You carry the <b>${mine.name}</b>: ${mine.text} Every Shoot half fires the gun you carry. Swap? Your old one stays here.`,
+    [['takegun', 'Swap guns'], ['closeread', 'Leave it']]);
+}
+
+function takeGun() {
+  const o = S.gunOffer;
+  $('#modal').hidden = true;
+  if (!o || S.drops.get(o.k) !== 'gun-' + o.id) return;
+  const old = run.gun;
+  run.gun = o.id;
+  S.drops.set(o.k, 'gun-' + old);
+  S.gunOffer = null;
+  sfx('pickup');
+  log(`You take the <b>${GUNS[o.id].name}</b> and leave your ${GUNS[old].name} on the floor.`);
+  if (S.playing && playedHalf().action.type === 'gun' && !S.act.atkUsed) S.act.atk = resolveAction(playedHalf().action);
+  renderDrops(); render();
 }
 
 function hitDoor(t, s) {
@@ -1437,7 +1452,7 @@ function nextAction() {
 async function endTurn() {
   if (S.busy || S.phase !== 'turn') return;
   if (!S.playing) { toast('Pick a card first, or rest.'); return; }
-  if (playedHalf().action.dmg > 0) S.lastCard = playedHalf();
+  if (S.act.atk && S.act.atk.dmg > 0) S.lastCard = { name: halfName(playedHalf()), action: S.act.atk };
   S.playing.used = true; S.playing = null;
   S.hidden = hasImplant('chameleon') && !S.act.steps;
   tickSerums();
@@ -2207,10 +2222,10 @@ function renderVats() {
 }
 
 function renderDrops() {
-  for (const t of $('#board').querySelectorAll('.tile.drop')) { t.classList.remove('drop', 'drop-stim', 'drop-speed', 'drop-strength', 'drop-gunmod'); t.innerHTML = ''; }
+  for (const t of $('#board').querySelectorAll('.tile.drop')) { t.classList.remove('drop', 'drop-stim', 'drop-speed', 'drop-strength', 'drop-gun'); t.innerHTML = ''; }
   for (const [k, what] of S.drops) {
     const t = tileEl(...unkey(k));
-    t.classList.add('drop', 'drop-' + what);
+    t.classList.add('drop', what.startsWith('gun-') ? 'drop-gun' : 'drop-' + what);
     t.innerHTML = '<span></span>';
   }
 }
@@ -2445,7 +2460,7 @@ function renderSide() {
     <div class="panel">
       <div class="row"><span>Creds</span><b>¥${fmtMove(run.creds)}</b></div>
       ${S.codes.length ? `<div class="note">Codes found:</div>${S.codes.map(c => `<div class="row"><span>${c.label}</span><b>${c.code}</b></div>`).join("")}` : ""}
-      ${run.gunMods ? `<div class="row"><span>Gun mods</span><b>+${run.gunMods} gun damage</b></div>` : ''}
+      <div class="row" title="${GUNS[run.gun].text}"><span>Gun</span><b>${GUNS[run.gun].name}</b></div>
       ${run.stims ? `<div class="row" title="Heals 1 a turn for ${STIM_TURNS} turns"><span>Healing stim${run.stims > 1 ? ` ×${run.stims}` : ''}</span><b><button class="mini-btn" data-act="stim" ${canUseItem ? '' : 'disabled'}>Use</button></b></div>` : ''}
       ${S.regen ? `<div class="buff">Healing stim: +1 HP at the start of your next ${S.regen} turn${S.regen > 1 ? 's' : ''}</div>` : ''}
       ${Object.entries(SERUMS).map(([kind, sv]) => `
@@ -2473,9 +2488,9 @@ function renderBar() {
       ? `Pick one half of a card to use it, and click a blue tile to move (up to ${fmtMove(a.move)}).`
       : '<b>All your cards are used.</b> Rest to get them back.';
     else if (!a.atkUsed) hint = (isDirectional(a.atk) ? 'Point toward a target and click a red tile' : 'Click a red target')
-      + ` to use <b>${playedHalf().name}</b>. Click it again to put it back.`;
+      + ` to use <b>${halfName(playedHalf())}</b>. Click it again to put it back.`;
     else hint = a.mvUsed ? 'Done for this turn. Use a stim or serum if you like, then end your turn.' : (a.steps ? `You have ${fmtMove(a.move)} step${a.move > 1 ? 's' : ''} left. Click a blue tile, or end your turn.` : 'Click a blue tile to move, or end your turn.');
-    if (S.inDuct) hint = `<b>In the air ducts.</b> Nobody can see you${c && a.atk && a.atk.type !== 'self' && !a.atkUsed ? `, and there's nothing to hit with ${playedHalf().name} from here` : ''}. ${S.grates.has(key(S.player.x, S.player.y)) ? 'Click the floor next to this grate to climb out, or crawl on.' : 'Crawl along the duct (blue). Climb out at a grate.'}`;
+    if (S.inDuct) hint = `<b>In the air ducts.</b> Nobody can see you${c && a.atk && a.atk.type !== 'self' && !a.atkUsed ? `, and there's nothing to hit with ${halfName(playedHalf())} from here` : ''}. ${S.grates.has(key(S.player.x, S.player.y)) ? 'Click the floor next to this grate to climb out, or crawl on.' : 'Crawl along the duct (blue). Climb out at a grate.'}`;
     const bonus = '';
     bar.innerHTML = `
       <div class="hint">${hint}</div>
@@ -2521,7 +2536,7 @@ function actionHTML(s) {
 }
 
 // A card: two halves, each an action with its name. `chosen` = index of the half being played (or -1).
-const cardHTML = (c, chosen = -1) => c.halves.map((h, i) => `<div class="half ${i === chosen ? 'chosen' : ''}" data-half="${i}" title="${h.name}: ${atkLabel(h.action)}">${actionHTML(h.action)}<div class="hname">${h.name}</div></div>`).join('<div class="or">or</div>');
+const cardHTML = (c, chosen = -1) => c.halves.map((h, i) => `<div class="half ${i === chosen ? 'chosen' : ''}" data-half="${i}" title="${halfName(h)}: ${atkLabel(resolveAction(h.action))}">${actionHTML(resolveAction(h.action))}<div class="hname">${halfName(h)}</div></div>`).join('<div class="or">or</div>');
 
 // All your cards for this floor, in a fixed order: used ones are dark, burned ones are gone.
 function renderHand() {
@@ -2545,7 +2560,7 @@ function renderHand() {
     el.onclick = () => pickCard(c, 0);  // resting: picks the whole card to burn
     el.querySelectorAll('.half').forEach((hEl, i) => {
       hEl.onclick = e => { e.stopPropagation(); pickCard(c, i); };
-      hEl.onmouseenter = () => { if (S.phase === 'turn' && !S.playing && !c.used && !spent) { S.preview = c.halves[i].action; renderOverlays(); } };
+      hEl.onmouseenter = () => { if (S.phase === 'turn' && !S.playing && !c.used && !spent) { S.preview = resolveAction(c.halves[i].action); renderOverlays(); } };
     });
     el.onmouseleave = () => { S.preview = null; renderOverlays(); };
     h.appendChild(el);
@@ -2571,7 +2586,7 @@ function describeTile(x, y) {
   if (S.vats.has(k)) out.push(S.breakable.name[0].toUpperCase() + S.breakable.name.slice(1));
   if (x === S.exit.x && y === S.exit.y) out.push('Lift');
   if (S.loot.has(k)) out.push('Cache');
-  if (S.drops.has(k)) out.push('Pickup');
+  if (S.drops.has(k)) out.push(S.drops.get(k).startsWith('gun-') ? GUNS[S.drops.get(k).slice(4)].name : 'Pickup');
   if (S.corpses.has(k)) out.push(S.corpses.get(k).searched ? 'Body (searched)' : 'Body');
   if (S.trips.has(k)) out.push('Laser tripwire');
   if (S.fire.has(k)) out.push('Fire');
@@ -2649,6 +2664,7 @@ document.addEventListener('click', e => {
   else if (act === 'overdrive') overdrive();
   else if (act === 'sound') toggleSound();
   else if (act === 'center') centerCamera();
+  else if (act === 'takegun') takeGun();
   else if (act === 'god') toggleGod();
   else if (act === 'howto') showHowTo();
   else if (act === 'gacha') gacha();

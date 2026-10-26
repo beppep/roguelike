@@ -358,7 +358,23 @@ function generateFloor(f) {
     const c = corners.find(([x, y]) => g[y][x] === '.' && DIRS.every(([dx, dy]) => inRoom(x + dx, y + dy) || g[y + dy][x + dx] === '#'));
     if (c) { g[c[1]][c[0]] = 'c'; cams++; }
   }
+  // Puddles: small blobs of the floor's own liquid on open floor, away from the start.
+  const liquids = [];
+  if (f.puddles) {
+    const open = [];
+    for (let y = 1; y < f.h - 1; y++) for (let x = 1; x < f.w - 1; x++) if (g[y][x] === '.' && dist[y][x] > 6) open.push([x, y]);
+    const taken = new Set();
+    for (let i = 0; i < f.puddles.count && open.length; i++) {
+      const blob = [open[Math.floor(rng() * open.length)]], size = ri(PUDDLE_SIZE[0], PUDDLE_SIZE[1]);
+      for (let j = 0; j < size * 3 && blob.length < size; j++) {
+        const [bx, by] = blob[Math.floor(rng() * blob.length)], [dx, dy] = DIRS[Math.floor(rng() * 4)];
+        if (g[by + dy] && g[by + dy][bx + dx] === '.' && !blob.some(([px, py]) => px === bx + dx && py === by + dy)) blob.push([bx + dx, by + dy]);
+      }
+      for (const [x, y] of blob) if (!taken.has(key(x, y))) { taken.add(key(x, y)); liquids.push([key(x, y), f.puddles.kind]); }
+    }
+  }
   const out = g.map(row => row.join(''));
+  out.liquids = liquids;
   out.ducts = [...ducts];  // the duct layer rides along with the map rows
   return out;
 }

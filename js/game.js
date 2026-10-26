@@ -818,7 +818,7 @@ function loadRoom(idx) {
     round: 0, phase: 'turn', sel: null, act: null,
     preview: null, hoverDir: null, busy: false, log: [],
     doors: new Map(), keyDoors: new Set(), codeDoors: new Map(), codes: [], planned: false, keypad: null, props: new Set(), vats: new Map(), drops: new Map(), corpses: new Map(), breakable: BREAKABLES[FLOORS[idx].theme], loot: new Map(), furn: new Map(), seen: new Set(), vis: new Set(), cam: { x: 0, y: 0 }, fast: false, buff: { speed: 0, strength: 0 },
-    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(), fire: new Map(), camLoop: 0, shp: new Map(), openDoors: new Set(),
+    grates: new Set(), ducts: new Set(rows.ducts || []), ductSeen: new Set(), inDuct: false, backrooms: new Set(), circles: new Set(), trips: new Set(), disguise: null, liquids: new Map(rows.liquids || []), fire: new Map(), camLoop: 0, shp: new Map(), openDoors: new Set(),
     alarm: 0, reinforceIn: 0, adapt: run.adapt, noiseBonus: run.adapt === 'loud' ? 1 : 0, familiar: hasEcho('staff'), stats: { kills: 0, takedowns: 0, alerts: 0, cameras: 0, alarm: 0, pickpockets: 0, smashed: 0, hacks: 0, loot: 0 },
   };
   let n = 0;
@@ -1071,6 +1071,7 @@ async function onTileClick(x, y) {
   if (a.atk && !a.atkUsed) {
     const hit = attackHit(a.atk, x, y);
     if (hit) return useAttack(hit);
+    if (a.atk.type === 'point') { toast('Click a tile you can see within range, or click the card again to put it back.'); return; }
   }
   if (!a.mvUsed) {
     // Moves go around tripwires you have seen when they can, and through them when there is no other way.
@@ -1889,12 +1890,14 @@ function renderLiquids() {
   if (!fx) return;
   fx.querySelectorAll('.puddle, .fire').forEach(el => el.remove());
   for (const [k, kind] of S.liquids) {
+    if (!S.seen.has(k)) continue;  // only puddles you have seen
     const [x, y] = unkey(k), el = document.createElement('div');
     el.className = 'puddle ' + kind;
     el.style.left = x * T + 'px'; el.style.top = y * T + 'px';
     fx.prepend(el);
   }
   for (const k of S.fire.keys()) {
+    if (!S.seen.has(k)) continue;
     const [x, y] = unkey(k), el = document.createElement('div');
     el.className = 'fire';
     el.style.left = x * T + 'px'; el.style.top = y * T + 'px';
@@ -2496,7 +2499,7 @@ function renderOverlays() {
   if (S.phase === 'turn' && !S.busy && S.throwing) mark(throwTiles(S.throwing), 'target');
   else if (S.phase === 'turn' && !S.busy) {
     const a = S.act;
-    if (!a.mvUsed) mark(reachTiles(a.move), 'reach');
+    if (!a.mvUsed && !(a.atk && !a.atkUsed && a.atk.type === 'point')) mark(reachTiles(a.move), 'reach');
     if (a.atk && !a.atkUsed && !S.inDuct) markAtk(a.atk, isDirectional(a.atk) ? S.hoverDir : null);
     else if (S.preview && !a.atkUsed && !S.inDuct) markAtk(S.preview, null);
   }
@@ -2524,6 +2527,8 @@ function renderOverlays() {
     t.classList.toggle('duct-exit', S.inDuct && c === 'reach' && !S.ducts.has(k));
   }
   renderDucts(new Set([...cls].filter(([, c]) => c === 'reach').map(([k]) => k)));
+  // Newly seen puddles appear as you look around.
+  if (S.liquids.size && S.seen.size !== S.liquidSeenAt) { S.liquidSeenAt = S.seen.size; renderLiquids(); }
 }
 
 // Your body: a silhouette with a marker on each part that can hold an implant. Gold = implant, red ring = defect.

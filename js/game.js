@@ -1742,13 +1742,17 @@ async function runEnemyPhase() {
   S.phase = 'enemy'; S.busy = true; S.hoverDir = null; S.sel = null;
   render();
   await sleep(250);
-  for (const e of [...S.enemies]) {
-    if (e.hp <= 0) continue;
-    S.fast = !onScreen(e);
-    await enemyTurn(e);
-    S.fast = false;
-    if (S.player.hp <= 0) { S.busy = false; return gameOver('Your vitals hit zero.'); }
+  // Enemies you can't see act first, instantly. The ones you can see then act together, each starting a moment
+  // after the last, so a crowded room doesn't take ages but you can still follow who does what.
+  const all = [...S.enemies], seen = all.filter(e => onScreen(e) && visible(e)), unseen = all.filter(e => !seen.includes(e));
+  S.fast = true;
+  for (const e of unseen) {
+    if (e.hp > 0) await enemyTurn(e);
+    if (S.player.hp <= 0) { S.fast = false; S.busy = false; return gameOver('Your vitals hit zero.'); }
   }
+  S.fast = false;
+  await Promise.all(seen.map((e, i) => sleep(i * ENEMY_STAGGER).then(() => e.hp > 0 && S.player.hp > 0 ? enemyTurn(e) : null)));
+  if (S.player.hp <= 0) { S.busy = false; return gameOver('Your vitals hit zero.'); }
   await tickFire();
   if (S.player.hp <= 0) { S.busy = false; return gameOver('You burned.'); }
   if (!S.enemies.some(isHostile)) { S.busy = false; return roomCleared(); }
@@ -1756,6 +1760,9 @@ async function runEnemyPhase() {
   S.busy = false;
   startRound();
 }
+
+// Delay between the start of each visible enemy's turn (they overlap).
+const ENEMY_STAGGER = 90;
 
 // ---------- Enemy AI ----------
 async function enemyTurn(e) {
@@ -2092,6 +2099,8 @@ function renderLiquids() {
 // ---------- Effects ----------
 async function walk(u, path) {
   for (const [x, y] of path) {
+    // Others move at the same time: never step onto someone.
+    if (u !== S.player && ((enemyAt(x, y) && enemyAt(x, y) !== u) || (x === S.player.x && y === S.player.y))) break;
     if (u !== S.player && doorAt(x, y)) {
       S.doors.delete(key(x, y));
       S.openDoors.add(key(x, y));

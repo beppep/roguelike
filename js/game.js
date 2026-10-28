@@ -162,7 +162,7 @@ const isCivilian = e => !!ENEMY_TYPES[e.kind].civilian;
 const isHostile = e => !isCamera(e) && !isCivilian(e);
 
 function alertEnemy(e, bySight) {
-  if (isCivilian(e) && !e.alerted) return scream(e, S.player);
+  if (isCivilian(e) && !e.alerted) return runForAlarm(e, S.player);
   if (e.alerted || isCamera(e)) return;
   // Echo: Familiar Face. The first person to see you on a floor hesitates, sure they know you.
   if (S.familiar && bySight) {
@@ -202,7 +202,7 @@ function checkSight() {
       blowDisguise(e);
     }
     if (isCamera(e) && hasGear('corpmask') && !S.maskBlown) continue;
-    if (isCivilian(e)) { if (S.violentRound === S.round) scream(e, S.player); continue; }
+    if (isCivilian(e)) { if (!S.disguise || S.violentRound === S.round) runForAlarm(e, S.player); continue; }
     if (isCamera(e)) cameraSpot(e); else alertEnemy(e, true);
   }
 }
@@ -218,11 +218,52 @@ function noticeBody(e) {
   const t = visionTiles(e).find(t => { const c = S.corpses.get(key(t.x, t.y)); return c && !c.found; });
   if (!t) return;
   S.corpses.get(key(t.x, t.y)).found = true;
-  if (isCivilian(e)) return scream(e, t);
+  if (isCivilian(e)) return runForAlarm(e, t);
   e.suspicious = { x: t.x, y: t.y, turns: INVESTIGATE_TURNS + 2 }; e.atTarget = false;
   floatText(e, '?!', 'alert');
   log(`${nameOf(e)} finds a body and calls it in.`);
   raiseAlarm(1);
+}
+
+// Alarm buttons that still work.
+const liveAlarms = () => [...S.furn].filter(([, f]) => f.kind === 'alarm' && !f.cut).map(([k]) => unkey(k));
+
+// A clerk who saw something heads for the nearest working alarm button (shown on the board). With none left, it
+// screams and runs instead.
+function runForAlarm(e, seen) {
+  if (e.alerted) return;
+  const P = S.player, { dist } = bfs(e.x, e.y, (x, y) => !enemyBlocked(x, y));
+  let best = null, bd = Infinity;
+  for (const [ax, ay] of liveAlarms()) for (const [dx, dy] of DIRS) { const dd = dist.get(key(ax + dx, ay + dy)); if (dd !== undefined && dd < bd) { bd = dd; best = [ax, ay]; } }
+  if (!best) return scream(e, seen);
+  e.alerted = true; e.toAlarm = { x: best[0], y: best[1] }; e.saw = { x: seen.x, y: seen.y }; e.intent = null; e.suspicious = null;
+  floatText(e, '!', 'alert');
+  sfx('alert');
+  log(`${nameOf(e)} saw you and runs for the alarm button. Stop them before they get there.`);
+  S.stats.alerts++;
+  renderUnits(); renderOverlays();
+}
+
+async function alarmRunTurn(e) {
+  const a = e.toAlarm, f = S.furn.get(key(a.x, a.y)), P = S.player;
+  // Their button was cut or smashed on the way: look for another one.
+  if (!f || f.cut) { e.alerted = false; e.toAlarm = null; runForAlarm(e, e.saw); if (!e.toAlarm) return; return alarmRunTurn(e); }
+  if (manh(e, a) > 1) {
+    const { dist, prev } = bfs(e.x, e.y, (x, y) => !enemyBlocked(x, y) && !(enemyAt(x, y) && enemyAt(x, y) !== e) && !(x === P.x && y === P.y));
+    let goal = null, gd = Infinity;
+    for (const [dx, dy] of DIRS) { const k = key(a.x + dx, a.y + dy), dd = dist.get(k); if (dd !== undefined && dd < gd) { gd = dd; goal = [a.x + dx, a.y + dy]; } }
+    if (goal) await walk(e, pathTo(prev, e.x, e.y, goal[0], goal[1]).slice(0, CLERK_RUN));
+  }
+  if (e.hp > 0 && manh(e, a) === 1) {
+    e.toAlarm = null; e.fleeing = true;
+    floatText(e, 'ALARM', 'alert');
+    sfx('alarm');
+    log(`${nameOf(e)} hits the alarm button. Guards are on their way to where you were seen.`);
+    raiseAlarm(ALARM_BUTTON_RAISE);
+    makeNoise(a.x, a.y, NOISE.shout * 2, e.saw, true);
+  }
+  await pause(80);
+  renderOverlays();
 }
 
 // Staff who see violence or a body scream (everyone nearby comes to look) and run.
@@ -374,11 +415,12 @@ function makeFurniture(kind) {
 // Searching takes no card and no move, but you have to be standing right next to it.
 function searchFurniture(x, y) {
   const f = S.furn.get(key(x, y)), P = S.player;
-  const what = { desk: 'computer', cabinet: 'cabinet', safe: 'safe', vending: 'vending machine', terminal: 'terminal', husk: 'droid husk', altar: 'altar', stairs: 'stairwell door', contact: 'person', phone: 'phone' }[f.kind];
+  const what = { desk: 'computer', cabinet: 'cabinet', safe: 'safe', vending: 'vending machine', terminal: 'terminal', alarm: 'alarm button', husk: 'droid husk', altar: 'altar', stairs: 'stairwell door', contact: 'person', phone: 'phone' }[f.kind];
   if (Math.abs(P.x - x) + Math.abs(P.y - y) !== 1) { toast(`Get next to the ${what} to use it.`); return; }
   if (f.kind === 'safe') return f.opened ? toast('The safe is empty.') : openKeypad('safe', x, y);
   if (f.kind === 'vending') return openShop();
   if (f.kind === 'terminal') return toast('A networked terminal. Pick a Hack half and click the terminal from next to it.');
+  if (f.kind === 'alarm') return toast(f.cut ? 'This alarm button is cut.' : 'An alarm button: clerks who see you run for these. Hack it (or smash it) to cut it.');
   if (f.kind === 'husk') return showModal('Droid husk', '', [['closeread', 'Close']], `<div class="doc mail"><p>${DROID_LOGS[(x * 7 + y) % DROID_LOGS.length]}</p></div>`);
   if (f.kind === 'stairs') return showModal('Fire stairs', 'A stairwell door, propped open with a fire extinguisher. Taking the stairs skips the lift: no story, no reward, and the Head loses track of you, so the next floor is not set against you.',
     [['stairs', 'Take the stairs'], ['closeread', 'Not yet']]);
@@ -429,6 +471,7 @@ function hackTargetAt(x, y) {
   const P = S.player, near = manh(P, { x, y }) === 1;
   const f = S.furn.get(key(x, y));
   if (f && f.kind === 'terminal' && near) return 'terminal';
+  if (f && f.kind === 'alarm' && !f.cut && near) return 'alarm';
   if (S.codeDoors.has(key(x, y)) && near) return 'keypad';
   const e = enemyAt(x, y);
   if (e && isCamera(e) && near && !(e.looped > 0)) return 'camera';
@@ -515,6 +558,16 @@ function hackAt(t) {
     traceRisk();
     log('You talk the keypad into opening.');
     renderCodeDoors(); renderUnits();
+    return hackDone();
+  }
+  if (what === 'alarm') {
+    const f = S.furn.get(key(t.x, t.y));
+    f.cut = true;
+    tileEl(t.x, t.y).classList.add('cut');
+    glitch(tileEl(t.x, t.y));
+    traceRisk();
+    floatText(t, 'CUT', 'hack');
+    log('You cut the alarm button. Nobody is ringing anything from here.');
     return hackDone();
   }
   if (what === 'laser') {
@@ -931,6 +984,7 @@ function loadRoom(idx) {
       else if (c === 'r') S.circles.add(key(x, y));
       else if (c === 'A') S.furn.set(key(x, y), { kind: 'altar', used: false });
       else if (c === 'Z') S.furn.set(key(x, y), { kind: 'stairs' });
+      else if (c === 'B') S.furn.set(key(x, y), { kind: 'alarm', cut: false });
       else if (c === 'U') S.furn.set(key(x, y), { kind: 'husk' });
       else if (c === 'Q') S.furn.set(key(x, y), { kind: 'contact', used: false });
       else if (c === 'H') S.furn.set(key(x, y), { kind: 'phone', used: false });
@@ -942,7 +996,7 @@ function loadRoom(idx) {
       }
       else if (c === '$') S.loot.set(key(x, y), rollLoot(FLOORS[idx].loot) || 'creds');
       else if (ENEMY_TYPES[c]) S.enemies.push({ id: 'e' + n++, kind: c, x, y, hp: ENEMY_TYPES[c].hp, max: ENEMY_TYPES[c].hp, intent: null, alerted: false, facing: [0, 1] });
-      return c === '#' || 'oKFSVTGAZQHU'.includes(c);
+      return c === '#' || 'oKFSVTGAZQHUB'.includes(c);
     }));
   });
   S.nextId = n;
@@ -1158,7 +1212,7 @@ const canRob = e => !isCamera(e) && !e.alerted && !e.robbed;
 function thingAt(x, y) {
   const k = key(x, y), e = enemyAt(x, y), f = S.furn.get(k);
   if (e && (visible(e) || manh(e, S.player) === 1)) return ENEMY_TYPES[e.kind].name.toLowerCase();
-  if (f) return { desk: 'desk', cabinet: 'cabinet', safe: 'safe', vending: 'vending machine', terminal: 'terminal', altar: 'altar', stairs: 'stairwell door', contact: 'person', phone: 'phone' }[f.kind] || f.kind;
+  if (f) return { alarm: 'alarm button', desk: 'desk', cabinet: 'cabinet', safe: 'safe', vending: 'vending machine', terminal: 'terminal', altar: 'altar', stairs: 'stairwell door', contact: 'person', phone: 'phone' }[f.kind] || f.kind;
   if (doorAt(x, y)) return 'door';
   if (S.keyDoors.has(k)) return 'keycard door';
   if (S.codeDoors.has(k)) return 'keypad door';
@@ -1720,17 +1774,17 @@ function nextAction() {
 // Waiting: stand still and play no card this turn (one you picked but did not use goes back into your hand).
 // Only before you've moved: moving costs a card, so walking eventually wears your hand down.
 async function waitTurn() {
-  if (S.busy || S.phase !== 'turn' || S.act.atkUsed || S.act.steps) return;
+  if (S.busy || S.phase !== 'turn' || S.act.atkUsed || (S.act.steps && !FREE_TURNS)) return;
   S.playing = null; S.act.atk = null; S.preview = null;
   S.hidden = hasImplant('chameleon') && !S.act.steps;
-  log('You wait.');
+  if (!S.act.steps) log('You wait.');
   tickSerums();
   await runEnemyPhase();
 }
 
 async function endTurn() {
   if (S.busy || S.phase !== 'turn') return;
-  if (!S.playing) { toast('Pick a card first, or rest.'); return; }
+  if (!S.playing) { if (FREE_TURNS) return waitTurn(); toast('Pick a card first, or rest.'); return; }
   if (S.act.atk && S.act.atk.dmg > 0) S.lastCard = { name: halfName(playedHalf()), action: S.act.atk };
   S.playing.used = true; S.playing = null;
   S.hidden = hasImplant('chameleon') && !S.act.steps;
@@ -1771,6 +1825,7 @@ async function enemyTurn(e) {
   if (e.stunned) { e.stunned--; e.aim = null; await pause(300); }
   else if (e.ally > 0) await allyTurn(e);
   else if (isCamera(e)) await cameraTurn(e);
+  else if (e.toAlarm) await alarmRunTurn(e);
   else if (e.alerted && e.fleeing) await fleeTurn(e);
   else if (e.alerted) await alertedTurn(e);
   else if (e.suspicious) await investigateTurn(e);
@@ -2624,7 +2679,8 @@ function intentHTML(e) {
   if (e.stunned) return `<span class="stun">${e.stunned > 1 ? `Asleep ${e.stunned} turns` : 'Stunned'}</span>`;
   if (isCamera(e) && (S.camLoop > 0 || e.looped > 0)) return '<span class="stun">Looped</span>';
   if (isCamera(e)) return e.tracking ? '<span class="a">Tracking</span>' : '<span class="idle">Watching</span>';
-  if (e.alerted && e.fleeing) return `<span class="sus">${isCivilian(e) ? 'Screaming' : 'Fleeing'}</span>`;
+  if (e.toAlarm) return '<span class="a">→ Alarm!</span>';
+  if (e.alerted && e.fleeing) return `<span class="sus">${isCivilian(e) ? 'Hiding' : 'Fleeing'}</span>`;
   if (isCivilian(e) && !e.suspicious) return '<span class="idle">Working</span>';
   if (!e.alerted && e.bribed) return '<span class="idle">Bribed</span>';
   if (!e.alerted && e.suspicious) return '<span class="sus">? Searching</span>';
@@ -2731,7 +2787,7 @@ function renderOverlays() {
     visionTiles(e).forEach(t => seen.add(key(t.x, t.y)));
     for (const s of predictPatrol(e)) visionTiles({ ...e, ...s }).forEach(t => next.add(key(t.x, t.y)));
   }
-  const aims = new Set();
+  const aims = new Set(), alarmTargets = new Set(S.enemies.filter(e => e.toAlarm && visible(e)).map(e => key(e.toAlarm.x, e.toAlarm.y)));
   for (const e of S.enemies) if (e.aim && visible(e)) e.aim.forEach(t => aims.add(key(t.x, t.y)));
   for (const t of $('#board').querySelectorAll('.tile')) {
     t.classList.remove('reach', 'range', 'target', 'preview', 'range-hack', 'target-hack');
@@ -2740,6 +2796,7 @@ function renderOverlays() {
     t.classList.toggle('seen', seen.has(k));
     t.classList.toggle('next', !seen.has(k) && next.has(k));
     t.classList.toggle('aim', aims.has(k));
+    t.classList.toggle('alarm-target', alarmTargets.has(k));
     // Never seen: black. Seen before but out of sight now: remembered, but dark.
     t.classList.toggle('unseen', !S.seen.has(k) && !S.planned);
     t.classList.toggle('planned', !S.seen.has(k) && S.planned);
@@ -2869,9 +2926,9 @@ function renderBar() {
     bar.innerHTML = `
       <div class="hint">${hint}</div>
       ${canOverdrive() ? '<button data-act="overdrive" title="Synaptic Accelerator: once per floor">Overdrive</button>' : ''}
-      <button data-act="wait" ${a.atkUsed || a.steps ? 'disabled' : ''} title="Stand still: end your turn without moving or playing a card">Wait</button>
+      <button data-act="wait" ${a.atkUsed || (a.steps && !FREE_TURNS) ? 'disabled' : ''} title="Stand still: end your turn without moving or playing a card">Wait</button>
       <button data-act="rest" ${canRest ? '' : 'disabled'}>Rest</button>
-      <button class="${a.atkUsed && a.mvUsed ? 'primary ready' : ''}" data-act="end" ${c ? '' : 'disabled'}>End turn</button>`;
+      <button class="${a.atkUsed && a.mvUsed ? 'primary ready' : ''}" data-act="end" ${c || FREE_TURNS ? '' : 'disabled'}>End turn</button>`;
   } else if (S.phase === 'burn') {
     const c = S.sel;
     bar.innerHTML = `
@@ -2955,7 +3012,7 @@ function describeTile(x, y) {
   if (S.inDuct && S.ducts.has(k)) out.push(S.grates.has(k) ? 'Vent grate' : 'Air duct');
   if (x === P.x && y === P.y) out.push('You');
   if (e && visible(e)) out.push(ENEMY_TYPES[e.kind].name + (isCamera(e) && (S.camLoop > 0 || e.looped > 0) ? ' (looped)' : e.bribed ? ' (bribed)' : ''));
-  if (f) out.push({ desk: 'Desk', cabinet: 'Cabinet', safe: f.opened ? 'Safe (open)' : 'Safe', vending: 'Vending machine', terminal: 'Terminal',
+  if (f) out.push({ alarm: f.cut ? 'Alarm button (cut)' : 'Alarm button', desk: 'Desk', cabinet: 'Cabinet', safe: f.opened ? 'Safe (open)' : 'Safe', vending: 'Vending machine', terminal: 'Terminal',
     husk: 'Droid husk', altar: 'Altar', stairs: 'Fire stairs', contact: 'Contact', phone: 'Phone' }[f.kind]);
   if (S.grates.has(k) && !S.inDuct) out.push('Vent grate');
   if (doorAt(x, y)) out.push('Locked door' + (S.doors.get(k) < doorMaxHp() ? ` (${S.doors.get(k)} HP)` : ''));

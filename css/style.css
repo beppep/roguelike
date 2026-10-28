@@ -281,9 +281,9 @@ button.ready { animation: end-pulse 1.3s ease-in-out infinite; }
 .unit.camera .token { border-radius: 4px; transform: scale(0.72); background: #1a1916; }
 .unit.camera .token b { font-size: 15px; }
 .intent .sus { color: var(--gold); font-style: italic; }
-.alarm { display: inline-flex; gap: 3px; }
-.alarm i { width: 12px; height: 8px; background: #0e0d0b; border: 1px solid var(--line); }
-.alarm i.on { background: var(--red, #b5563a); border-color: var(--red, #b5563a); }
+span.alarm { display: inline-flex; gap: 3px; }
+span.alarm i { width: 12px; height: 8px; background: #0e0d0b; border: 1px solid var(--line); }
+span.alarm i.on { background: var(--red, #b5563a); border-color: var(--red, #b5563a); }
 
 /* ---------- Floor 4: Meatology. Candlelit, wet. Floor 5: the Head. Cold server halls, old stone underneath. ---------- */
 .theme-flesh .floor { background: radial-gradient(circle at 30% 60%, #2a1614 0 12%, transparent 13%), #211715; box-shadow: inset 0 0 0 1px #1a1110; }
@@ -570,3 +570,11 @@ header { position: fixed; top: 0; left: 0; right: 0; z-index: 10; margin: 0; pad
 #hand.locked .card { pointer-events: none; }
 #center { top: 60px; right: 244px; }
 #feed { bottom: 220px; left: 12px; }
+
+/* Alarm buttons: a red panel on the wall. Cut ones go dark. The one a clerk is running for pulses. */
+.tile.alarm::before { content: ''; position: absolute; inset: 10px 12px; border-radius: 2px; background: #3a2420; box-shadow: inset 0 0 0 2px #6a3a30, 0 2px 0 rgba(0,0,0,.5); }
+.tile.alarm::after { content: ''; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border-radius: 50%; background: #c0392b; box-shadow: 0 0 6px rgba(192,57,43,.7); right: auto; bottom: auto; }
+.tile.alarm.cut::after { background: #3a3631; box-shadow: none; }
+.tile.alarm { cursor: pointer; }
+.tile.alarm-target { box-shadow: inset 0 0 0 3px var(--red) !important; animation: alarm-pulse .8s ease-in-out infinite alternate; }
+@keyframes alarm-pulse { from { filter: brightness(1); } to { filter: brightness(1.6); } }

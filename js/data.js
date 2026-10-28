@@ -104,7 +104,7 @@ const rollDmg = n => {
 const DOOR_HP_BY_FLOOR = [5, 7, 9];
 // Everything else can be smashed with damaging attacks too (smashing is loud). HP by kind; furniture spills
 // whatever it held. Outer walls, grates, the fire stairs and people at their desks can't be broken.
-const STRUCTURE_HP = { keydoor: 15, codedoor: 12, wall: 20, desk: 4, cabinet: 6, terminal: 6, vending: 8, safe: 20, husk: 5, altar: 12, phone: 3 };
+const STRUCTURE_HP = { alarm: 4, keydoor: 15, codedoor: 12, wall: 20, desk: 4, cabinet: 6, terminal: 6, vending: 8, safe: 20, husk: 5, altar: 12, phone: 3 };
 
 // Furniture you can smash with damaging attacks, per floor theme. Each one leaves a pickup on its tile:
 // walk over it to take it. Floors not listed here have furniture that can't be broken.
@@ -345,3 +345,14 @@ const TRACE_CHANCE = 0.2;
 // DUCT_MAX tiles away (as the crow walks); tunnels that cross make small networks. Inside, you crawl with your
 // normal steps, nobody can see or follow you, and you climb out through any grate.
 const DUCT_MAX = 14;
+
+// ---------- Alarm buttons ----------
+// Red panels on the walls (ALARM_BUTTONS per floor). A clerk who sees you (without a disguise), sees violence or
+// finds a body runs for the nearest working one at CLERK_RUN tiles a turn. If it gets there: the alarm goes up by
+// ALARM_BUTTON_RAISE and guards come to where it saw you. Stop it on the way, or cut the button first (Hack it or
+// smash it). With no working button left, the clerk just runs and hides.
+const ALARM_BUTTONS = 3, CLERK_RUN = 2, ALARM_BUTTON_RAISE = 2;
+
+// Experiment: you can end a turn without playing a card, even after walking (End turn or Wait). Set to false to make
+// every turn you move cost a card again.
+const FREE_TURNS = true;

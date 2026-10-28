@@ -14,7 +14,7 @@ function mulberry32(a) {
 // K desk with a computer and F filing cabinet (solid; search them from next door), $ loot cache,
 // L keycard door, C keypad door, S wall safe, V vending machine, T networked terminal, G vent grate (in a wall),
 // P player, X exit (the lift up), g/d/e/k/m/a enemies (ganger, drone, enforcer, cultist, golem, avatar), v clerk, c camera, n sniper, y daemon, b oil storage floor, A altar, r blood circle floor,
-// Z fire stairs, Q Bazaar contact, H dream phone, U droid husk, w laser tripwire (floor). The air ducts are returned as rows.ducts.
+// Z fire stairs, Q Bazaar contact, H dream phone, B alarm button, U droid husk, w laser tripwire (floor). The air ducts are returned as rows.ducts.
 function generateFloor(f) {
   const rng = mulberry32(f.seed + (f.runSeed || 0));
   const ri = (a, b) => a + Math.floor(rng() * (b - a + 1)), pick = a => a[Math.floor(rng() * a.length)];
@@ -178,6 +178,7 @@ function generateFloor(f) {
   const safeRooms = [...rooms].sort(() => rng() - 0.5).slice(0, ri(1, 2));
   const vendRooms = rooms.filter(r => !safeRooms.includes(r)).sort(() => rng() - 0.5).slice(0, 2);
   const termRooms = rooms.filter(r => !safeRooms.includes(r) && !vendRooms.includes(r)).sort(() => rng() - 0.5).slice(0, ri(1, 2));
+  const alarmRooms = rooms.filter(r => !termRooms.includes(r)).sort(() => rng() - 0.5).slice(0, ALARM_BUTTONS);
   // Far rooms (by walking distance) for the fire stairs ('Z', all but the last floor), a Bazaar contact ('Q', floors 1-4)
   // and the dream phone ('H', floors 2-5).
   const farRooms = rooms.filter(r => r !== exitRoom && dist[r.cy][r.cx] > 14 && !safeRooms.includes(r) && !vendRooms.includes(r) && !termRooms.includes(r)).sort(() => rng() - 0.5);
@@ -202,7 +203,7 @@ function generateFloor(f) {
   // A cabinet stands against a plain stretch of wall (no door beside it), and only if the room stays connected.
   const roomConnected = r => {
     const open = [];
-    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (!'#oKFSVTAZQHU'.includes(g[y][x])) open.push(key(x, y));
+    for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) if (!'#oKFSVTAZQHUB'.includes(g[y][x])) open.push(key(x, y));
     if (!open.length) return true;
     const seenCells = new Set([open[0]]), stack = [open[0]];
     while (stack.length) {
@@ -278,7 +279,15 @@ function generateFloor(f) {
       if (roomConnected(r)) break;
       g[p[1]][p[0]] = '.';
     }
-    // A networked terminal: hack it with Energy to loop cameras, release doors, print the plan or pull a fire alarm.
+    // An alarm button on the wall: clerks run for these.
+    for (let i = 0; i < 6 && alarmRooms.includes(r); i++) {
+      const p = wallSpot(r);
+      if (!p) continue;
+      g[p[1]][p[0]] = 'B';
+      if (roomConnected(r)) break;
+      g[p[1]][p[0]] = '.';
+    }
+    // A networked terminal: hack it to loop cameras, release doors, print the plan or pull a fire alarm.
     for (let i = 0; i < 6 && termRooms.includes(r); i++) {
       const p = wallSpot(r);
       if (!p) continue;

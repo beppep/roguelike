@@ -933,6 +933,12 @@ function renderCodeDoors() {
 // Floors are generated the first time you reach them, using this run's seed and the Head's response to how
 // you played the floor before: more guards for killers, more cameras for ghosts, emptier drawers for thieves.
 function floorMap(idx) {
+  if (!run.maps[idx] && run.custom && run.custom.floor === idx) {
+    // A hand-made level from the editor stands in for this floor.
+    const rows = [...run.custom.rows];
+    rows.ducts = [...run.custom.ducts]; rows.liquids = run.custom.liquids.map(p => [...p]);
+    run.maps[idx] = rows;
+  }
   if (!run.maps[idx]) {
     const fl = { ...FLOORS[idx], runSeed: run.seed };
     if (run.adapt === 'killer') { fl.guards += 2; fl.mix += 'e'; }
@@ -948,9 +954,10 @@ function newRun() {
   run = { char: { ...OPERATIVE, move: OPERATIVE.move + (hasEcho('limb') ? 1 : 0) }, creds: START_CREDS, stims: hasEcho('saint') ? 2 : 0, speed: 0, strength: 0, gun: START_GUN, mods: {}, maxHp: MAX_HP,
     seed: Math.floor(Math.random() * 1e6), maps: [], adapt: null, story: [], floorStats: [],
     gear: {}, implants: [], defects: [], notes: [], items: {} };
+  run.custom = customLevel;
   godCreds();
   deck = startingDeck(OPERATIVE);
-  loadRoom(0);
+  loadRoom(customLevel ? customLevel.floor : 0);
 }
 
 function loadRoom(idx) {
@@ -1004,7 +1011,7 @@ function loadRoom(idx) {
   if (hasDefect('misfire')) { const c = S.cards[Math.floor(Math.random() * S.cards.length)]; c.used = true; run.notes.push(`Misfire: <b>${c.name}</b> starts this floor used.`); }
   S.enemies.forEach(initFacing);
   // Keycard floors: about a third of the staff carry a keycard (at least 2). Any one of them will do.
-  S.needKey = KEYCARD_FLOORS.has(idx); S.hasKey = false;
+  S.needKey = S.keyDoors.size > 0; S.hasKey = false;
   // Several staff carry a keycard (2 or 3, fewer if the floor has fewer people). Any one of them will do.
   if (S.needKey) S.enemies.filter(e => !isCamera(e)).sort(() => Math.random() - 0.5).slice(0, Math.max(2, Math.floor(S.enemies.filter(e => !isCamera(e)).length / 3)) + (Math.random() < 0.5 ? 1 : 0)).forEach(e => { e.hasKey = true; });
   hideClues();
@@ -2262,8 +2269,41 @@ function showModal(title, msg, buttons, extra = '') {
 function roomCleared() {
   S.phase = 'over'; render();
   run.floorStats[S.room] = { ...S.stats };
+  if (run.custom && S.room === run.custom.floor && !run.customDone) {
+    sfx('lift');
+    return showModal('Level cleared', `You made it through <b>${esc(run.custom.name)}</b> in ${S.round} round${S.round === 1 ? '' : 's'}.`,
+      [['customagain', 'Play it again'], ['customon', 'Keep climbing'], ['customs', 'Custom levels']]);
+  }
   if (S.room === FLOORS.length - 1) return showFinalLift();
   showLift();
+}
+
+// ---------- Custom levels ----------
+// Levels made in the editor (editor.html). One plays as its floor of a fresh run; after its lift you can keep climbing.
+let customLevel = null;
+const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+
+function playLevel(lv) {
+  customLevel = lv;
+  $('#modal').hidden = true;
+  newRun();
+  showModal(esc(lv.name), lv.author ? `A level by ${esc(lv.author)}, standing in for ${FLOORS[lv.floor].name}.` : `A custom level, standing in for ${FLOORS[lv.floor].name}.`, [['closeread', 'Go']]);
+}
+
+function showCustomLevels(err = '') {
+  const list = savedLevels();
+  showModal('Custom levels', 'Levels made in the level editor. Saved levels live in this browser. A level someone sent you as a link opens straight away; you can also paste the link or code here.',
+    [['editor', 'Open the level editor'], ...(customLevel ? [['towerrun', 'Back to the normal tower']] : []), ['title', 'Back']],
+    `<div class="levels">${list.length ? list.map(l => `<div class="level-row"><div><b>${esc(l.name)}</b><span>${l.author ? 'by ' + esc(l.author) + ', ' : ''}${FLOORS[l.floor].name}, ${l.rows[0].length}×${l.rows.length}</span></div>
+      <button data-act="playlevel-${l.id}">Play</button></div>`).join('') : '<p class="muted">No saved levels yet.</p>'}
+      <div class="level-paste"><input id="level-code" placeholder="Paste a level link or code" autocomplete="off"><button data-act="pastelevel">Play</button></div>
+      ${err ? `<p class="err">${esc(err)}</p>` : ''}</div>`);
+  $('#modal .box').classList.add('wide');
+}
+
+async function pasteLevel() {
+  try { playLevel(await decodeLevel($('#level-code').value)); }
+  catch { showCustomLevels("That link or code didn't work. Copy the whole thing and try again."); }
 }
 
 // ---------- The lift ----------
@@ -2499,7 +2539,7 @@ function showHowTo() {
 // ---------- Title ----------
 function showTitle() {
   const list = echoes.map(id => ECHO_FLAVOUR[id]).filter(Boolean);
-  showModal('Roguelike', '', [['closeread', 'Climb the spine'], ['howto', 'How to play']], `<div class="title">
+  showModal('Roguelike', '', [['closeread', 'Climb the spine'], ['howto', 'How to play'], ['customs', 'Custom levels']], `<div class="title">
     <p class="epigraph">${TITLE_EPIGRAPH.split('\n').join('<br>')}</p>
     <p class="premise">${TITLE_PREMISE}</p>
     ${list.length ? `<div class="echoes"><b>Echoes</b>${list.map(e => `<div><i>${e.name}.</i> ${e.text}</div>`).join('')}</div>` : ''}</div>`);
@@ -3108,6 +3148,13 @@ document.addEventListener('click', e => {
   else if (act === 'god') toggleGod();
   else if (act === 'ascend') { if (godMode && S.phase !== 'over') { $('#modal').hidden = true; S.inDuct = false; log('God mode: you ascend.'); roomCleared(); } }
   else if (act === 'howto') showHowTo();
+  else if (act === 'customs') showCustomLevels();
+  else if (act === 'editor') location.href = 'editor.html';
+  else if (act === 'towerrun') { customLevel = null; history.replaceState(null, '', location.pathname); $('#modal').hidden = true; newRun(); }
+  else if (act === 'pastelevel') pasteLevel();
+  else if (act.startsWith('playlevel-')) { const lv = savedLevels().find(l => l.id === act.slice(10)); if (lv) playLevel(lv); }
+  else if (act === 'customagain') playLevel(run.custom);
+  else if (act === 'customon') { $('#modal').hidden = true; run.customDone = true; roomCleared(); }
   else if (act === 'gacha') gacha();
   else if (act === 'bribe') payBribe();
   else if (act === 'offer') offerBlood();
@@ -3135,6 +3182,8 @@ document.addEventListener('keydown', e => {
 });
 document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'keypad') enterCode(); });
 
+// A level link (index.html#L=...) plays that level; otherwise the title screen.
 newRun();
-showTitle();
+if (levelInHash()) decodeLevel(levelInHash()).then(playLevel, () => { showTitle(); toast("That level link didn't work."); });
+else showTitle();
 toggleSound(); toggleSound();  // sets the header button's label

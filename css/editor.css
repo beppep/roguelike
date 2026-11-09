@@ -1,0 +1,97 @@
+/* The level editor (editor.html). Tiles and tokens come from style.css; this is only the editor's own frame. */
+body.editor { overflow: hidden; }
+body.editor header { gap: 10px; flex-wrap: wrap; }
+body.editor header h1 { margin-right: 6px; white-space: nowrap; }
+body.editor header input, body.editor header select, .ed-size input, .ed-copyrow input, .ed-newform input, .ed-newform select {
+  font: 13px var(--mono); background: #0f0e0c; color: var(--ink); border: 1px solid var(--line); padding: 6px 9px; border-radius: 2px; }
+body.editor header input:focus, .ed-copyrow input:focus { outline: 1px solid var(--gold); }
+#lv-name { width: 190px; }
+#lv-author { width: 130px; }
+.to-game { color: var(--muted); font-size: 12px; text-decoration: none; margin-left: 4px; white-space: nowrap; }
+.to-game:hover { color: var(--ink); }
+
+#ed-view { position: fixed; inset: 0; background: #0b0a09; overflow: hidden; cursor: crosshair; touch-action: none; }
+#ed-view.can-pan, #ed-view.panning { cursor: grab; }
+#ed-view[data-tool="pick"] { cursor: copy; }
+#ed-view #board { transition: none; transform-origin: 0 0; }
+#ed-view .unit { pointer-events: none; transition: none; }
+#ed-view .tile > span { pointer-events: none; }
+#ed-view .tile.ed-flash { box-shadow: inset 0 0 0 3px var(--gold) !important; }
+#ed-rect { position: absolute; z-index: 5; pointer-events: none; background: rgba(201,162,74,.18); outline: 2px solid var(--gold); }
+#ed-rect.room { background: rgba(201,162,74,.08); box-shadow: inset 0 0 0 calc(var(--T) * 1) rgba(110,105,95,.45); }
+#ed-rect::after { content: attr(data-size); position: absolute; left: 0; top: -22px; font: 600 12px var(--mono); color: #17130a; background: var(--gold); padding: 1px 6px; }
+#board.ed-liquids .unit { opacity: .35; }
+
+.ed-panel { position: fixed; top: 62px; bottom: 10px; z-index: 10; overflow-y: auto; background: rgba(23,21,18,.95); border: 1px solid var(--line); padding: 10px 12px; }
+#ed-tools { left: 10px; width: 258px; }
+#ed-info { right: 10px; width: 236px; font-size: 12px; }
+.ed-panel h3 { margin: 12px 0 6px; font: 600 11px var(--mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); }
+.ed-panel section:first-child h3 { margin-top: 2px; }
+.ed-panel .muted, .ed-modal .muted { color: var(--muted); font-size: 12px; }
+.ed-panel p { margin: 0 0 8px; }
+
+.ed-tabs, .ed-toolrow { display: flex; gap: 4px; margin-bottom: 6px; }
+.ed-tabs button, .ed-toolrow button { flex: 1; padding: 6px 4px; font-size: 12px; }
+.ed-tabs button.on, .ed-toolrow button.on { background: var(--gold); color: #17130a; border-color: var(--gold); font-weight: 600; }
+.ed-tabs { border-bottom: 1px solid var(--line); padding-bottom: 8px; margin-bottom: 8px; }
+
+/* Palette: a small copy of each tile, scaled down from the board's size. */
+.ed-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+.ed-item { display: flex; align-items: center; gap: 7px; padding: 3px 6px 3px 3px; text-align: left; font-size: 11.5px; line-height: 1.2; background: transparent; border-color: transparent; min-width: 0; }
+.ed-item span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ed-item:hover:not(:disabled) { background: #26221c; border-color: var(--line); }
+.ed-item.on { background: #2e2818; border-color: var(--gold); }
+.swatch { flex: none; width: 32px; height: 32px; overflow: hidden; position: relative; border-radius: 1px; background: #0b0a09; }
+.swatch > .tile { position: absolute; left: 0; top: 0; transform: scale(.696); transform-origin: 0 0; }
+.swatch .unit { left: 0; top: 0; transition: none; }
+.ed-ductsw { position: absolute; inset: 0; background: #3b3e42; border: 3px solid #7d8187; }
+
+.ed-brushrow { display: flex; gap: 10px; align-items: flex-start; }
+.ed-brushrow .swatch { width: 46px; height: 46px; }
+.ed-brushrow .swatch > .tile { transform: none; }
+.ed-brushrow b { display: block; font-size: 13px; margin-bottom: 2px; }
+.ed-brushrow p { color: #bdb5a6; margin: 0; }
+#ed-hover { min-height: 34px; padding: 8px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); margin-top: 10px; }
+#ed-hover b { color: var(--gold); font-weight: 600; margin-right: 6px; }
+.ed-size { display: flex; align-items: center; gap: 6px; }
+.ed-size input { width: 58px; }
+.ed-size button { padding: 6px 10px; }
+
+.check { padding: 6px 8px 6px 10px; margin-bottom: 4px; border-left: 3px solid var(--line); background: #1d1a16; line-height: 1.35; }
+.check.err { border-left-color: var(--red); color: #e3b3a6; }
+.check.warn { border-left-color: var(--gold); color: #e2d2a8; }
+.check.ok { border-left-color: #7fa36a; color: var(--muted); }
+.check.go { cursor: pointer; }
+.check.go:hover { background: #26221c; }
+.ed-help p { color: var(--muted); }
+
+/* Dialogs */
+.ed-modal { text-align: left !important; width: min(640px, calc(100vw - 32px)); }
+.ed-modal h3 { font: 600 11px var(--mono); letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); margin: 18px 0 8px; }
+.ed-modal-foot { display: flex; justify-content: flex-end; margin-top: 18px; }
+.ed-share { margin: 14px 0; }
+.ed-share label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+.ed-copyrow { display: flex; gap: 8px; margin-top: 8px; }
+.ed-copyrow input { flex: 1; min-width: 0; }
+.ed-warnline { color: #e3b3a6 !important; border-left: 3px solid var(--red); padding-left: 10px; }
+.ed-lib { max-height: 46vh; overflow-y: auto; }
+.ed-librow { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ed-librow > div { flex: 1; min-width: 0; }
+.ed-librow span { display: block; color: var(--muted); font-size: 12px; }
+.ed-librow.cur b { color: var(--gold); }
+.ed-newform { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 12px; }
+.ed-newform label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.ed-newform input { width: 80px; }
+
+/* Narrow windows: the panels shrink; on a phone they stack under the header and the map gets the rest. */
+@media (max-width: 1000px) {
+  #ed-tools { width: 216px; }
+  #ed-info { width: 190px; }
+  .ed-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  body.editor header { padding: 6px 10px; }
+  #ed-tools { top: auto; left: 0; right: 0; bottom: 0; width: auto; height: 38vh; }
+  #ed-info { display: none; }
+  .ed-grid { grid-template-columns: 1fr 1fr; }
+}

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Level Editor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Special+Elite&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="css/editor.css">
+</head>
+<body class="editor">
+<header>
+  <h1>Level editor</h1>
+  <input id="lv-name" placeholder="Level name" maxlength="40" autocomplete="off">
+  <input id="lv-author" placeholder="Made by" maxlength="30" autocomplete="off">
+  <select id="lv-floor" title="Which tower floor the level stands in for: its look, loot, door strength and story page"></select>
+  <div class="spacer"></div>
+  <button data-ed="new">New</button>
+  <button data-ed="library">My levels</button>
+  <button data-ed="save" title="Save to My levels in this browser (Ctrl+S)">Save</button>
+  <button data-ed="share" title="A link or file to send to someone">Share</button>
+  <button data-ed="play" class="primary" title="Play it in a new tab">Playtest</button>
+  <a class="to-game" href="index.html">Back to the game</a>
+</header>
+
+<aside id="ed-tools" class="ed-panel">
+  <div class="ed-tabs" id="ed-layers">
+    <button data-layer="tiles" title="Walls, doors, furniture, people (1)">Map</button>
+    <button data-layer="ducts" title="The air ducts above the floor (2)">Ducts</button>
+    <button data-layer="liquids" title="Puddles of oil, chemicals and blood (3)">Puddles</button>
+  </div>
+  <div class="ed-toolrow" id="ed-toolrow">
+    <button data-tool="brush" title="Brush: paint tile by tile (B)">Brush</button>
+    <button data-tool="rect" title="Rectangle: drag to fill a box (R)">Box</button>
+    <button data-tool="room" title="Room: drag to build walls round a floor (M)">Room</button>
+    <button data-tool="fill" title="Fill: flood an area of the same tile (F)">Fill</button>
+    <button data-tool="pick" title="Pick: take the tile you click as your brush (I, or Alt+click)">Pick</button>
+  </div>
+  <div class="ed-toolrow">
+    <button data-ed="undo" title="Undo (Ctrl+Z)">Undo</button>
+    <button data-ed="redo" title="Redo (Ctrl+Y)">Redo</button>
+    <button data-ed="fit" title="Fit the whole level in view (0)">Fit</button>
+  </div>
+  <div id="palette"></div>
+</aside>
+
+<div id="ed-view"><div id="board"></div></div>
+
+<aside id="ed-info" class="ed-panel">
+  <section id="ed-brush"></section>
+  <section id="ed-hover" class="muted">Point at a tile.</section>
+  <section>
+    <h3>Size</h3>
+    <div class="ed-size"><input id="lv-w" type="number" min="12" max="80"> × <input id="lv-h" type="number" min="10" max="60"> <button data-ed="resize">Resize</button></div>
+  </section>
+  <section>
+    <h3>Checks</h3>
+    <div id="ed-checks"></div>
+  </section>
+  <section class="ed-help">
+    <h3>Controls</h3>
+    <p>Left-click paints. Right-click erases. Alt+click picks up a tile.</p>
+    <p>Wheel zooms. Drag with the middle button or hold Space to pan.</p>
+  </section>
+</aside>
+
+<div id="toast"></div>
+<div id="modal" hidden></div>
+
+<script src="js/data.js"></script>
+<script src="js/gen.js"></script>
+<script src="js/levels.js"></script>
+<script src="js/editor.js"></script>
+</body>
+</html>
